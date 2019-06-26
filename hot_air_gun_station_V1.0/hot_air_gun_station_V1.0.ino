@@ -4,7 +4,7 @@
  */
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <Wire.h> 
+#include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 #include <CommonControls.h>
 #include <EEPROM.h>
@@ -17,7 +17,7 @@ const uint16_t temp_tip[3] = {200, 300, 400};                               // T
 
 const uint8_t AC_SYNC_PIN   = 2;                                            // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN   = 7;                                            // Hot gun heater management pin
-const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change! 
+const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change!
 const uint8_t TEMP_GUN_PIN	= A0;                                           // Hot gun temperature checking pin
 
 const uint8_t R_MAIN_PIN	= 3;                                            // Rotary encoder main pin. Do not change!
@@ -167,9 +167,9 @@ bool CONFIG::load(void) {
 bool CONFIG::readRecord(uint16_t addr, uint32_t &recID) {
     uint8_t Buff[record_size];
 
-    for (uint8_t i = 0; i < record_size; ++i) 
+    for (uint8_t i = 0; i < record_size; ++i)
         Buff[i] = EEPROM.read(addr+i);
-  
+
     uint8_t summ = 0;
     for (byte i = 0; i < sizeof(struct cfg) + 4; ++i) {
         summ <<= 2; summ += Buff[i];
@@ -195,7 +195,7 @@ class HOTGUN_CFG : public CONFIG {
         void     init(void);
         bool     isCold(uint16_t temp);                                     // Whether the HOT GUN temperature is low
         uint16_t tempPreset(void);                                          // The preset temperature in internal units
-		uint8_t	 fanPreset(void);                                           // The preset fan speed 0 - 255 
+		uint8_t	 fanPreset(void);                                           // The preset fan speed 0 - 255
         uint16_t tempInternal(uint16_t temp);                               // Translate the human readable temperature into internal value
         uint16_t tempHuman(uint16_t temp);                                  // Translate temperature from internal units to the Celsius
         void     save(uint16_t temp, uint8_t fanSpeed);                     // Save preset temperature in the internal units and fan speed
@@ -253,7 +253,7 @@ uint16_t HOTGUN_CFG::tempInternal(uint16_t t) {                             // T
         temp = map(t+1, temp_tip[1], temp_tip[2], t_tip[1], t_tip[2]);
     else
         temp = map(t+1, temp_tip[0], temp_tip[1], t_tip[0], t_tip[1]);
- 
+
     for (uint8_t i = 0; i < 10; ++i) {
         uint16_t tH = tempHuman(temp);
         if (tH <= t) break;
@@ -290,7 +290,7 @@ void HOTGUN_CFG::applyCalibrationData(uint16_t tip[3]) {
     }
     t_tip[0] = tip[0];
     t_tip[1] = tip[1];
-    if (tip[2] > max_temp) tip[2] = max_temp; 
+    if (tip[2] > max_temp) tip[2] = max_temp;
     t_tip[2] = tip[2];
 }
 
@@ -400,7 +400,7 @@ class DSPL : protected LiquidCrystal_I2C {
 };
 
 void DSPL::init(void) {
-    LiquidCrystal_I2C::begin();
+    LiquidCrystal_I2C::init();
     LiquidCrystal_I2C::clear();
     for (uint8_t i = 0; i < 3; ++i)
         LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
@@ -600,14 +600,14 @@ float HISTORY::dispersion(void) {
 }
 
 //------------------------------------------ class PID algoritm to keep the temperature -----------------------
-/*  The PID algorithm 
+/*  The PID algorithm
  *  Un = Kp*(Xs - Xn) + Ki*summ{j=0; j<=n}(Xs - Xj) + Kd(Xn - Xn-1),
  *  Where Xs - is the setup temperature, Xn - the temperature on n-iteration step
  *  In this program the interactive formula is used:
  *    Un = Un-1 + Kp*(Xn-1 - Xn) + Ki*(Xs - Xn) + Kd*(Xn-2 + Xn - 2*Xn-1)
  *  With the first step:
  *  U0 = Kp*(Xs - X0) + Ki*(Xs - X0); Xn-1 = Xn;
- *  
+ *
  *  PID coefficients history:
  *  10/14/2017  [768, 32, 328]
  */
@@ -662,7 +662,7 @@ int PID::changePID(uint8_t p, int k) {
 
 long PID::reqPower(int temp_set, int temp_curr) {
     if (temp_h0 == 0) {
-        // When the temperature is near the preset one, reset the PID and prepare iterative formula                        
+        // When the temperature is near the preset one, reset the PID and prepare iterative formula
         if ((temp_set - temp_curr) < 30) {
             if (!pid_iterate) {
                 pid_iterate = true;
@@ -748,7 +748,7 @@ class HOTGUN : public PID {
         uint32_t    last_period;                                            // The time in ms when the counter reset
         const       uint8_t     period 			= 100;
 		const		uint8_t		min_fan_speed	= 30;
-        const       uint16_t    temp_gun_cold   = 80;                       // The temperature of the cold iron 
+        const       uint16_t    temp_gun_cold   = 80;                       // The temperature of the cold iron
 };
 
 HOTGUN::HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin) {
@@ -877,7 +877,7 @@ class SCREEN {
 		virtual SCREEN* show(void)                  						{ return this; }
 		virtual SCREEN* menu(void)                  						{ return this; }
 		virtual SCREEN* menu_long(void)             						{ if (this->next != 0)  return this->next;  else return this; }
-        virtual SCREEN* reedSwitch(bool on)                                 { return this; }    
+        virtual SCREEN* reedSwitch(bool on)                                 { return this; }
 		virtual void    rotaryValue(int16_t value)     						{ }
 		void            forceRedraw(void)                   				{ update_screen = 0; }
 	protected:
@@ -995,7 +995,7 @@ SCREEN* mainSCREEN::menu(void) {
 SCREEN* mainSCREEN::reedSwitch(bool on) {
     if (on && this->on)
         return this->on;
-    return this; 
+    return this;
 }
 
 //---------------------------------------- class workSCREEN [the hot air gun is ON] ----------------------------
@@ -1022,7 +1022,7 @@ class workSCREEN : public SCREEN {
 		HOTGUN_CFG* pCfg;                             						// Pointer to the configuration instance
 		bool      	ready;                            						// Whether the IRON have reached the preset temperature
 		bool		mode_temp;												// Preset mode: temperature or fan speed
-		const uint16_t period = 1000;               						// The period to update the screen (ms) 
+		const uint16_t period = 1000;               						// The period to update the screen (ms)
 };
 
 void workSCREEN::init(void) {
@@ -1063,7 +1063,7 @@ SCREEN* workSCREEN::show(void) {
 	pD->appliedPower(p);
     pD->fanSpeed(pHG->getFanSpeed());
 
-    
+
 Serial.print("Diff = "); Serial.print(temp_set - temp);
 uint32_t disp = pHG->tempDispersion();
 Serial.print(", Dispersion = "); Serial.println(disp);
@@ -1098,7 +1098,7 @@ SCREEN* workSCREEN::menu(void) {
 SCREEN* workSCREEN::reedSwitch(bool on) {
     if (!on && next)
         return next;
-    return this; 
+    return this;
 }
 
 //---------------------------------------- class errorSCREEN [the error detected] ------------------------------
@@ -1144,7 +1144,7 @@ class configSCREEN : public SCREEN {
 void configSCREEN::init(void) {
     pHG->switchPower(false);
     mode = 0;
-    pEnc->reset(mode, 0, 4, 1, 0, true);          
+    pEnc->reset(mode, 0, 4, 1, 0, true);
     pD->clear();
     pD->setupMode(0);
     this->scr_timeout = 30;                                                 // This variable is defined in the superclass
@@ -1239,7 +1239,7 @@ SCREEN* calibSCREEN::show(void) {
     if (millis() < update_screen) return this;
     update_screen       = millis() + period;
     int temp            = pHG->tempAverage();                               // The Hot gun average value of the current temp. (internal)
-    int temp_set        = pHG->getTemp();                                   // The preset 
+    int temp_set        = pHG->getTemp();                                   // The preset
     uint16_t tempH      = pCfg->tempHuman(temp);
     uint16_t temp_setH  = pCfg->tempHuman(temp_set);
     pD->tSet(temp_setH);
@@ -1281,7 +1281,7 @@ void calibSCREEN::rotaryValue(int16_t value) {
     forceRedraw();
 }
 
-SCREEN* calibSCREEN::menu(void) { 
+SCREEN* calibSCREEN::menu(void) {
     if (tune) {                                                             // Calibrated value for the temperature limit jus has been setup
         tune = false;
         calib_temp[0][mode] = pEnc->read();                                 // Real temperature (Celsius)
@@ -1414,7 +1414,7 @@ SCREEN* tuneSCREEN::show(void) {
     }
     return this;
 }
-  
+
 SCREEN* tuneSCREEN::menu(void) {                                            // The rotary button pressed
     if (on) {
         pHG->fixPower(0);
@@ -1542,7 +1542,7 @@ SCREEN* pidSCREEN::menu(void) {                 							// The encoder button pre
 		} else {
 			pEnc->reset(pHG->getFanSpeed(), 0, 250, 5, 20);
 		}
-	} else {    
+	} else {
 		mode = 0;
 		pEnc->reset(1, 1, 5, 1, 1, true);           						// 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan speed
 	}
@@ -1614,7 +1614,7 @@ void setup() {
 	hg.setTemp(temp);
 	hg.setFanSpeed(fan);
 
-    reedSwitch.init(500, 3000);
+    reedSwitch.init(500);
 
 	// Initialize rotary encoder
 	rotEncoder.init();
@@ -1642,7 +1642,7 @@ void loop() {
 	static int16_t  old_pos 	    = 0;
 	static uint32_t ac_check 	    = 5000;
 
-  
+
 	int16_t pos = rotEncoder.read();
     if (reset_encoder) {
         old_pos = pos;
@@ -1661,7 +1661,7 @@ void loop() {
         reset_encoder = true;
         return;
     }
-    
+
 	uint8_t bStatus = rotButton.buttonCheck();
 	switch (bStatus) {
 		case 2:                                     						// long press;
@@ -1691,7 +1691,7 @@ void loop() {
 		pCurrentScreen->init();
         reset_encoder = true;
 	}
-	
+
 	if (end_of_power_period) {												// Calculate the required power
 		hg.keepTemp();
 		end_of_power_period = false;
