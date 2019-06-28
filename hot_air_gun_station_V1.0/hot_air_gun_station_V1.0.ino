@@ -10,22 +10,22 @@
 #include <EEPROM.h>
 #include <SPI.h>
 
-const uint16_t temp_minC 	= 150;
-const uint16_t temp_maxC	= 500;
+const uint16_t temp_minC    = 150;
+const uint16_t temp_maxC    = 500;
 const uint16_t temp_ambC    = 25;
-const uint16_t temp_tip[3] = {200, 300, 400};                               // Temperature reference points for calibration
+const uint16_t temp_tip[3]  = {200, 300, 400};                              // Temperature reference points for calibration
 
 const uint8_t AC_SYNC_PIN   = 2;                                            // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN   = 7;                                            // Hot gun heater management pin
 const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change!
-const uint8_t TEMP_GUN_PIN	= A0;                                           // Hot gun temperature checking pin
+const uint8_t TEMP_GUN_PIN  = A0;                                           // Hot gun temperature checking pin
 
-const uint8_t R_MAIN_PIN	= 3;                                            // Rotary encoder main pin. Do not change!
-const uint8_t R_SECD_PIN	= 4;                                            // Rotary encoder secondary pin
-const uint8_t R_BUTN_PIN	= 5;                                            // Rotary encoder button pin
+const uint8_t R_MAIN_PIN    = 3;                                            // Rotary encoder main pin. Do not change!
+const uint8_t R_SECD_PIN    = 4;                                            // Rotary encoder secondary pin
+const uint8_t R_BUTN_PIN    = 5;                                            // Rotary encoder button pin
 
-const uint8_t REED_SW_PIN   = 11;                                            // Reed switch pin
-const uint8_t BUZZER_PIN	= 8;                                            // Buzzer pin
+const uint8_t REED_SW_PIN   = 11;                                           // Reed switch pin
+const uint8_t BUZZER_PIN    = 8;                                            // Buzzer pin
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -48,7 +48,7 @@ class CONFIG {
             rAddr = wAddr = 0;
             eLength       = 0;
             nextRecID     = 0;
-            uint8_t rs = sizeof(struct cfg) + 5;                             // The total config record size
+            uint8_t rs = sizeof(struct cfg) + 5;                            // The total config record size
             // Select appropriate record size; The record size should be power of 2, i.e. 8, 16, 32, 64, ... bytes
             for (record_size = 8; record_size < rs; record_size <<= 1);
         }
@@ -195,7 +195,7 @@ class HOTGUN_CFG : public CONFIG {
         void     init(void);
         bool     isCold(uint16_t temp);                                     // Whether the HOT GUN temperature is low
         uint16_t tempPreset(void);                                          // The preset temperature in internal units
-		uint8_t	 fanPreset(void);                                           // The preset fan speed 0 - 255
+        uint8_t  fanPreset(void);                                           // The preset fan speed 0 - 255
         uint16_t tempInternal(uint16_t temp);                               // Translate the human readable temperature into internal value
         uint16_t tempHuman(uint16_t temp);                                  // Translate temperature from internal units to the Celsius
         void     save(uint16_t temp, uint8_t fanSpeed);                     // Save preset temperature in the internal units and fan speed
@@ -209,7 +209,7 @@ class HOTGUN_CFG : public CONFIG {
         const   uint16_t min_temp  = 50;
         const   uint16_t max_temp  = 900;
         const   uint16_t def_temp  = 600;                                   // Default preset temperature
-        const   uint8_t  def_fan   = 64;                                  	// Default preset fan speed 0 - 255
+        const   uint8_t  def_fan   = 64;                                    // Default preset fan speed 0 - 255
         const   uint16_t ambient_temp = 0;
         const   uint16_t ambient_tempC= 25;
 };
@@ -357,7 +357,7 @@ class DSPL : protected LiquidCrystal_I2C {
         void    tInternal(uint16_t t);                                      // Show the current temperature in internal units
         void    tReal(uint16_t t);                                          // Show the real temperature in Celsius in calibrate mode
         void    fanSpeed(uint8_t s);                                        // Show the fan speed
-		void	appliedPower(uint8_t p, bool show_zero = true);			    // Show applied power (%)
+        void    appliedPower(uint8_t p, bool show_zero = true);             // Show applied power (%)
         void    setupMode(uint8_t mode);
         void    msgON(void);                                                // Show message: "ON"
         void    msgOFF(void);
@@ -366,8 +366,8 @@ class DSPL : protected LiquidCrystal_I2C {
         void    msgFail(void);                                              // Show 'Fail' message
         void    msgTune(void);                                              // Show 'Tune' message
     private:
-        bool 	full_second_line;                                           // Whether the second line is full with the message
-		char 	temp_units;
+        bool     full_second_line;                                           // Whether the second line is full with the message
+        char     temp_units;
         const   uint8_t custom_symbols[3][8] = {
                           { 0b00110,                                        // Degree
                             0b01001,
@@ -405,16 +405,16 @@ void DSPL::init(void) {
     for (uint8_t i = 0; i < 3; ++i)
         LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
     full_second_line = false;
-	temp_units = 'C';
+    temp_units = 'C';
 }
 
 void DSPL::tSet(uint16_t t, bool Celsius) {
     char buff[10];
-	if (Celsius) {
-		temp_units = 'C';
-	} else {
-		temp_units = 'F';
-	}
+    if (Celsius) {
+        temp_units = 'C';
+    } else {
+        temp_units = 'F';
+    }
     LiquidCrystal_I2C::setCursor(0, 0);
     sprintf(buff, "Set:%3d%c%c", t, (char)1, temp_units);
     LiquidCrystal_I2C::print(buff);
@@ -473,13 +473,13 @@ void DSPL::fanSpeed(uint8_t s) {
 }
 
 void DSPL::appliedPower(uint8_t p, bool show_zero) {
-	char buff[6];
-	if (p > 99) p = 99;
+    char buff[6];
+    if (p > 99) p = 99;
     LiquidCrystal_I2C::setCursor(5, 1);
     if (p == 0 && !show_zero) {
         LiquidCrystal_I2C::print(F("     "));
     } else {
-	    sprintf(buff, " %c%2d%c", (char)3, p, '%');
+        sprintf(buff, " %c%2d%c", (char)3, p, '%');
         LiquidCrystal_I2C::print(buff);
     }
 }
@@ -543,45 +543,45 @@ void DSPL::msgTune(void) {
 //------------------------------------------ class HISTORY ----------------------------------------------------
 #define H_LENGTH 16
 class HISTORY {
-	public:
-		HISTORY(void)                               						{ len = 0; }
-		void     init(void)                         						{ len = 0; }
-		uint16_t last(void);
-		uint16_t top(void)                          						{ return queue[0]; }
-		void     put(uint16_t item);                						// Put new entry to the history
-		uint16_t average(void);                     						// calculate the average value
+    public:
+        HISTORY(void)                                                       { len = 0; }
+        void     init(void)                                                 { len = 0; }
+        uint16_t last(void);
+        uint16_t top(void)                                                  { return queue[0]; }
+        void     put(uint16_t item);                                        // Put new entry to the history
+        uint16_t average(void);                                             // calculate the average value
         float    dispersion(void);                                          // calculate the math dispersion
-	private:
-		volatile uint16_t queue[H_LENGTH];
-		volatile byte len;                          						// The number of elements in the queue
-		volatile byte index;                        						// The current element position, use ring buffer
+    private:
+        volatile uint16_t queue[H_LENGTH];
+        volatile byte len;                                                  // The number of elements in the queue
+        volatile byte index;                                                // The current element position, use ring buffer
 };
 
 void HISTORY::put(uint16_t item) {
-	if (len < H_LENGTH) {
-		queue[len++] = item;
-	} else {
-		queue[index ] = item;
-		if (++index >= H_LENGTH) index = 0;         						// Use ring buffer
-	}
+    if (len < H_LENGTH) {
+        queue[len++] = item;
+    } else {
+        queue[index ] = item;
+        if (++index >= H_LENGTH) index = 0;                                 // Use ring buffer
+    }
 }
 
 uint16_t HISTORY::last(void) {
     if (len == 0) return 0;
-	uint8_t i = len - 1;
-	if (index)
-		i = index - 1;
-	return queue[i];
+    uint8_t i = len - 1;
+    if (index)
+        i = index - 1;
+    return queue[i];
 }
 
 uint16_t HISTORY::average(void) {
-	uint32_t sum = 0;
+    uint32_t sum = 0;
     if (len == 0) return 0;
-	if (len == 1) return queue[0];
-	for (uint8_t i = 0; i < len; ++i) sum += queue[i];
-	sum += len >> 1;                              							// round the average
-	sum /= len;
-	return uint16_t(sum);
+    if (len == 1) return queue[0];
+    for (uint8_t i = 0; i < len; ++i) sum += queue[i];
+    sum += len >> 1;                                                        // round the average
+    sum /= len;
+    return uint16_t(sum);
 }
 
 float HISTORY::dispersion(void) {
@@ -687,7 +687,7 @@ long PID::reqPower(int temp_set, int temp_curr) {
     return pwr;
 }
 
-//--------------------- High frequency PWM signal calss on D9 pin ------------------------- ---------------
+//--------------------- High frequency PWM signal class on D9 pin ------------------------- ---------------
 class FastPWM_D9 {
     public:
         FastPWM_D9()                                { }
@@ -714,46 +714,46 @@ class HOTGUN : public PID {
     public:
         HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin);
         void        init(void);
-		bool		isOn(void)												{ return on; }
-		void		setTemp(uint16_t t)										{ temp_set = t; }
-		uint16_t	getTemp(void)											{ return temp_set; }
-		uint16_t	getCurrTemp(void)										{ return h_temp.last(); }
-		uint16_t 	tempAverage(void)                  						{ return h_temp.average(); }
+        bool        isOn(void)                                              { return on; }
+        void        setTemp(uint16_t t)                                     { temp_set = t; }
+        uint16_t    getTemp(void)                                           { return temp_set; }
+        uint16_t    getCurrTemp(void)                                       { return h_temp.last(); }
+        uint16_t    tempAverage(void)                                       { return h_temp.average(); }
         uint8_t     powerAverage(void)                                      { return h_power.average(); }
-		uint8_t     appliedPower(void)                						{ return actual_power; }
-		void		setFanSpeed(uint8_t f)									{ fan_speed = f; if (on) hg_fan.duty(f); }
-		uint8_t	    getFanSpeed(void)   									{ return fan_speed; }
+        uint8_t     appliedPower(void)                                      { return actual_power; }
+        void        setFanSpeed(uint8_t f)                                  { fan_speed = f; if (on) hg_fan.duty(f); }
+        uint8_t     getFanSpeed(void)                                       { return fan_speed; }
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
         void        switchPower(bool On);
         void        fixPower(uint8_t Power);                                // Set the specified power to the the hot gun
-		void     	keepTemp(void);
+        void        keepTemp(void);
         bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 10; }
         uint8_t     getMaxFixedPower(void)                                  { return period; }
-        bool        syncCB(void);											// Return true at the end of the power period
+        bool        syncCB(void);                                           // Return true at the end of the power period
     private:
         FastPWM_D9  hg_fan;
-		long     	power;                             						// The hot air gun power, calculated by the PID algorithm
-		uint16_t	temp_set;												// The preset temperature of the hot air gun (internal units)
-		uint16_t	temp_curr;												// The current temperature of the hot air gun
-		uint8_t		fan_speed;
+        long        power;                                                  // The hot air gun power, calculated by the PID algorithm
+        uint16_t    temp_set;                                               // The preset temperature of the hot air gun (internal units)
+        uint16_t    temp_curr;                                              // The current temperature of the hot air gun
+        uint8_t     fan_speed;
         uint8_t     sen_pin;
-		uint8_t		gun_pin;
-		HISTORY  	h_power;                           						// The history queue of power applied values
-		HISTORY  	h_temp;                            						// The history queue of the temperature
-		volatile    uint8_t     cnt;
+        uint8_t     gun_pin;
+        HISTORY     h_power;                                                // The history queue of power applied values
+        HISTORY     h_temp;                                                 // The history queue of the temperature
+        volatile    uint8_t     cnt;
         volatile    uint8_t     actual_power;
         volatile    bool        active;
         bool        on, fan, fix_power;
         bool        chill;                                                  // To chill the hot gun
         uint32_t    last_period;                                            // The time in ms when the counter reset
-        const       uint8_t     period 			= 100;
-		const		uint8_t		min_fan_speed	= 30;
-        const       uint16_t    temp_gun_cold   = 80;                       // The temperature of the cold iron
+        const       uint8_t     period        = 100;
+        const       uint8_t     min_fan_speed = 30;
+        const       uint16_t    temp_gun_cold = 80;                         // The temperature of the cold iron
 };
 
 HOTGUN::HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin) {
     sen_pin = HG_sen_pin;
-	gun_pin	= HG_pwr_pin;
+    gun_pin = HG_pwr_pin;
 }
 
 void HOTGUN::init(void) {
@@ -767,9 +767,9 @@ void HOTGUN::init(void) {
     last_period = 0;
     pinMode(sen_pin, INPUT);
     pinMode(gun_pin, OUTPUT);
-	digitalWrite(gun_pin, LOW);
+    digitalWrite(gun_pin, LOW);
     hg_fan.init();
-	h_temp.init();
+    h_temp.init();
     resetPID();
 }
 
@@ -787,26 +787,26 @@ bool HOTGUN::syncCB(void) {
             active = false;
         }
     }
-	return (cnt == 0);														// End of the Power period (period AC voltage shapes)
+    return (cnt == 0);                                                      // End of the Power period (period AC voltage shapes)
 }
 
 void HOTGUN::switchPower(bool On) {
-	on = On;
-	if (!on) {
-		digitalWrite(gun_pin, LOW);
+    on = On;
+    if (!on) {
+        digitalWrite(gun_pin, LOW);
         actual_power = 0;
-	} else {
-	    if (fan_speed < min_fan_speed)
-		    fan_speed = min_fan_speed;
-		hg_fan.duty(fan_speed);
+    } else {
+        if (fan_speed < min_fan_speed)
+            fan_speed = min_fan_speed;
+        hg_fan.duty(fan_speed);
         fan = true;
-	}
+    }
 }
 
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
 
-	uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+    uint16_t temp = analogRead(sen_pin);                                    // Check the hot air gun temperature
 
     h_temp.put(temp);
     if (!chill && on && temp > temp_set + 20) {
@@ -815,30 +815,30 @@ void HOTGUN::keepTemp(void) {
         chill = true;
     }
 
-	if (on) {
-		if (chill) {
-			if (temp < (temp_set - 8)) {
-				chill = false;
-				resetPID();
-			} else {
-				power = 0;
-				actual_power = 0;
+    if (on) {
+        if (chill) {
+            if (temp < (temp_set - 8)) {
+                chill = false;
+                resetPID();
+            } else {
+                power = 0;
+                actual_power = 0;
                 return;
-			}
-		}
-		power = reqPower(temp_set, temp);           						// Use PID algorithm to calculate power to be applied
-		actual_power = constrain(power, 0, period);
-		h_power.put(actual_power);
-	} else {
-        if (!fix_power) {
-		    actual_power = 0;
-		    digitalWrite(gun_pin, LOW);
+            }
         }
-	}
+        power = reqPower(temp_set, temp);                                   // Use PID algorithm to calculate power to be applied
+        actual_power = constrain(power, 0, period);
+        h_power.put(actual_power);
+    } else {
+        if (!fix_power) {
+            actual_power = 0;
+            digitalWrite(gun_pin, LOW);
+        }
+    }
 
     // Keep fan running till the hot gun become cold
     if (fan) {
-        if ((actual_power == 0) && temp <= temp_gun_cold) {                // Switch off the fan when the gun become cold
+        if ((actual_power == 0) && temp <= temp_gun_cold) {                 // Switch off the fan when the gun become cold
             hg_fan.duty(0);
             fan = false;
         }
@@ -865,130 +865,130 @@ void HOTGUN::fixPower(uint8_t Power) {
 
 //------------------------------------------ class SCREEN ------------------------------------------------------
 class SCREEN {
-	public:
-		SCREEN* next;                               						// Pointer to the next screen
-		SCREEN() {
-			next			= 0;
-			update_screen  	= 0;
-			scr_timeout    	= 0;
-			time_to_return 	= 0;
-		}
-		virtual void    init(void)                     						{ }
-		virtual SCREEN* show(void)                  						{ return this; }
-		virtual SCREEN* menu(void)                  						{ return this; }
-		virtual SCREEN* menu_long(void)             						{ if (this->next != 0)  return this->next;  else return this; }
+    public:
+        SCREEN* next;                                                       // Pointer to the next screen
+        SCREEN() {
+            next           = 0;
+            update_screen  = 0;
+            scr_timeout    = 0;
+            time_to_return = 0;
+        }
+        virtual void    init(void)                                          { }
+        virtual SCREEN* show(void)                                          { return this; }
+        virtual SCREEN* menu(void)                                          { return this; }
+        virtual SCREEN* menu_long(void)                                     { if (this->next != 0)  return this->next;  else return this; }
         virtual SCREEN* reedSwitch(bool on)                                 { return this; }
-		virtual void    rotaryValue(int16_t value)     						{ }
-		void            forceRedraw(void)                   				{ update_screen = 0; }
-	protected:
-		uint32_t update_screen;                     						// Time in ms when the screen should be updated
-		uint32_t scr_timeout;                       						// Timeout is sec. to return to the main screen, canceling all changes
-		uint32_t time_to_return;                    						// Time in ms to return to main screen
+        virtual void    rotaryValue(int16_t value)                          { }
+        void            forceRedraw(void)                                   { update_screen = 0; }
+    protected:
+        uint32_t update_screen;                                             // Time in ms when the screen should be updated
+        uint32_t scr_timeout;                                               // Timeout is sec. to return to the main screen, canceling all changes
+        uint32_t time_to_return;                                            // Time in ms to return to main screen
 };
 
 //---------------------------------------- class mainSCREEN [the hot air gun is OFF] ---------------------------
 class mainSCREEN : public SCREEN {
-	public:
-		mainSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* ENC, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
-			pHG 	= HG;
-			pD      = DSP;
-			pEnc    = ENC;
-			pBz     = Buzz;
-			pCfg    = Cfg;
-		}
-		virtual void    init(void);
-		virtual SCREEN* show(void);
-		virtual SCREEN* menu(void);
+    public:
+        mainSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* ENC, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
+            pHG     = HG;
+            pD      = DSP;
+            pEnc    = ENC;
+            pBz     = Buzz;
+            pCfg    = Cfg;
+        }
+        virtual void    init(void);
+        virtual SCREEN* show(void);
+        virtual SCREEN* menu(void);
         virtual SCREEN* reedSwitch(bool on);
-		virtual void	rotaryValue(int16_t value); 						// Setup the preset temperature
+        virtual void    rotaryValue(int16_t value);                         // Setup the preset temperature
         SCREEN*     on;                                                     // Screen mode when the power is
-	private:
-		HOTGUN*		pHG;                            						// Pointer to the hot air gun instance
-		DSPL*     	pD;                               						// Pointer to the DSPLay instance
-		ENCODER*	pEnc;                             						// Pointer to the rotary encoder instance
-		BUZZER*   	pBz;                              						// Pointer to the simple buzzer instance
-		HOTGUN_CFG* pCfg;                             						// Pointer to the configuration instance
-		uint32_t  	clear_used_ms;                    						// Time in ms when used flag should be cleared (if > 0)
-		bool		mode_temp;												// Preset mode: change temperature or change fan speed
-		bool      	used;                             						// Whether the IRON was used (was hot)
-		bool      	cool_notified;                    						// Whether there was cold notification played
-		const uint16_t period 				= 1000;               			// The period to update the screen
-		const uint32_t cool_notify_period 	= 120000; 						// The period to display 'cool' message (ms)
-		const uint16_t show_temp 			= 20000;           				// The period to show the preset temperature (ms)
+    private:
+        HOTGUN*     pHG;                                                    // Pointer to the hot air gun instance
+        DSPL*       pD;                                                     // Pointer to the DSPLay instance
+        ENCODER*    pEnc;                                                   // Pointer to the rotary encoder instance
+        BUZZER*     pBz;                                                    // Pointer to the simple buzzer instance
+        HOTGUN_CFG* pCfg;                                                   // Pointer to the configuration instance
+        uint32_t    clear_used_ms;                                          // Time in ms when used flag should be cleared (if > 0)
+        bool        mode_temp;                                              // Preset mode: change temperature or change fan speed
+        bool        used;                                                   // Whether the IRON was used (was hot)
+        bool        cool_notified;                                          // Whether there was cold notification played
+        const uint16_t period             = 1000;                           // The period to update the screen
+        const uint32_t cool_notify_period = 120000;                         // The period to display 'cool' message (ms)
+        const uint16_t show_temp          = 20000;                          // The period to show the preset temperature (ms)
 };
 
 void mainSCREEN::init(void) {
-	pHG->switchPower(false);
-	uint16_t temp_set 	= pHG->getTemp();
-	uint16_t tempH 	    = pCfg->tempHuman(temp_set);         				// The preset temperature in the human readable units
+    pHG->switchPower(false);
+    uint16_t temp_set = pHG->getTemp();
+    uint16_t tempH    = pCfg->tempHuman(temp_set);                          // The preset temperature in the human readable units
     pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
-	used = !pCfg->isCold(pHG->tempAverage());
-	cool_notified = !used;
-	if (used) {                                   							// the hot gun was used, we should save new data in EEPROM
-		pCfg->save(temp_set, pHG->getFanSpeed());
-	}
-	mode_temp = true;
-	clear_used_ms = 0;
+    used = !pCfg->isCold(pHG->tempAverage());
+    cool_notified = !used;
+    if (used) {                                                             // the hot gun was used, we should save new data in EEPROM
+        pCfg->save(temp_set, pHG->getFanSpeed());
+    }
+    mode_temp = true;
+    clear_used_ms = 0;
     pD->clear();
-	forceRedraw();
+    forceRedraw();
 }
 
 void mainSCREEN::rotaryValue(int16_t value) {
-	if (mode_temp) {														// set hot gun temperature
-		uint16_t temp = pCfg->tempInternal(value);
-		pHG->setTemp(temp);
-		pD->tSet(value);
-	} else {																// set fan speed
-		pHG->setFanSpeed(value);
-		pD->fanSpeed(value);
-	}
-	update_screen  = millis() + period;
+    if (mode_temp) {                                                        // set hot gun temperature
+        uint16_t temp = pCfg->tempInternal(value);
+        pHG->setTemp(temp);
+        pD->tSet(value);
+    } else {                                                                // set fan speed
+        pHG->setFanSpeed(value);
+        pD->fanSpeed(value);
+    }
+    update_screen  = millis() + period;
 }
 
 SCREEN* mainSCREEN::show(void) {
-	if (millis() < update_screen) return this;
-	update_screen = millis() + period;
+    if (millis() < update_screen) return this;
+    update_screen = millis() + period;
 
-	if (clear_used_ms && (millis() > clear_used_ms)) {
-		clear_used_ms = 0;
-		used = false;
-	}
+    if (clear_used_ms && (millis() > clear_used_ms)) {
+        clear_used_ms = 0;
+        used = false;
+    }
 
     uint16_t temp_set = pHG->getTemp();
     pD->tSet(pCfg->tempHuman(temp_set));
-	uint16_t temp  = pHG->tempAverage();
-	uint16_t tempH = pCfg->tempHuman(temp);
-	if (pCfg->isCold(temp)) {
-		if (used) {
-			pD->msgCold();
-		} else {
-			pD->msgOFF();
-		}
-		if (used && !cool_notified) {
-		    pBz->lowBeep();
-		    cool_notified = true;
-		    clear_used_ms = millis() + cool_notify_period;
-		}
-	} else {
+    uint16_t temp  = pHG->tempAverage();
+    uint16_t tempH = pCfg->tempHuman(temp);
+    if (pCfg->isCold(temp)) {
+        if (used) {
+            pD->msgCold();
+        } else {
+            pD->msgOFF();
+        }
+        if (used && !cool_notified) {
+            pBz->lowBeep();
+            cool_notified = true;
+            clear_used_ms = millis() + cool_notify_period;
+        }
+    } else {
         pD->msgOFF();
-	}
-	pD->tCurr(tempH);
+    }
+    pD->tCurr(tempH);
     pD->appliedPower(0, false);
     pD->fanSpeed(pHG->getFanSpeed());
-	return this;
+    return this;
 }
 
 SCREEN* mainSCREEN::menu(void) {
-	if (mode_temp) {                                                        // Prepare to adjust the fan speed
-		uint8_t	fs = pHG->getFanSpeed();
-		pEnc->reset(fs, 0, 255, 5, 20);
-		mode_temp = false;
-	} else {                                                                // Prepare to adjust the preset temperature
-		uint16_t temp_set   = pHG->getTemp();
-		uint16_t tempH 	    = pCfg->tempHuman(temp_set);
-		pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
-		mode_temp = true;
-	}
+    if (mode_temp) {                                                        // Prepare to adjust the fan speed
+        uint8_t fs = pHG->getFanSpeed();
+        pEnc->reset(fs, 0, 255, 5, 20);
+        mode_temp = false;
+    } else {                                                                // Prepare to adjust the preset temperature
+        uint16_t temp_set   = pHG->getTemp();
+        uint16_t tempH      = pCfg->tempHuman(temp_set);
+        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+        mode_temp = true;
+    }
     return this;
 }
 
@@ -1000,57 +1000,57 @@ SCREEN* mainSCREEN::reedSwitch(bool on) {
 
 //---------------------------------------- class workSCREEN [the hot air gun is ON] ----------------------------
 class workSCREEN : public SCREEN {
-	public:
-		workSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* Enc, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
-			update_screen = 0;
-			pHG 	= HG;
-			pD    	= DSP;
-			pBz   	= Buzz;
-			pEnc  	= Enc;
-			pCfg  	= Cfg;
-		}
-		virtual void    init(void);
-		virtual SCREEN* show(void);
-		virtual SCREEN* menu(void);
+    public:
+        workSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* Enc, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
+            update_screen = 0;
+            pHG     = HG;
+            pD      = DSP;
+            pBz     = Buzz;
+            pEnc    = Enc;
+            pCfg    = Cfg;
+        }
+        virtual void    init(void);
+        virtual SCREEN* show(void);
+        virtual SCREEN* menu(void);
         virtual SCREEN* reedSwitch(bool on);
-		virtual void    rotaryValue(int16_t value); 						// Change the preset temperature
-	private:
-		HOTGUN*     pHG;                            						// Pointer to the IRON instance
-		DSPL*     	pD;                               						// Pointer to the DSPLay instance
-		BUZZER*   	pBz;                              						// Pointer to the simple Buzzer instance
-		ENCODER*  	pEnc;                             						// Pointer to the rotary encoder instance
-		HOTGUN_CFG* pCfg;                             						// Pointer to the configuration instance
-		bool      	ready;                            						// Whether the IRON have reached the preset temperature
-		bool		mode_temp;												// Preset mode: temperature or fan speed
-		const uint16_t period = 1000;               						// The period to update the screen (ms)
+        virtual void    rotaryValue(int16_t value);                         // Change the preset temperature
+    private:
+        HOTGUN*     pHG;                                                    // Pointer to the IRON instance
+        DSPL*       pD;                                                     // Pointer to the DSPLay instance
+        BUZZER*     pBz;                                                    // Pointer to the simple Buzzer instance
+        ENCODER*    pEnc;                                                   // Pointer to the rotary encoder instance
+        HOTGUN_CFG* pCfg;                                                   // Pointer to the configuration instance
+        bool        ready;                                                  // Whether the IRON have reached the preset temperature
+        bool        mode_temp;                                              // Preset mode: temperature or fan speed
+        const uint16_t period = 1000;                                       // The period to update the screen (ms)
 };
 
 void workSCREEN::init(void) {
-	uint8_t fs = pHG->getFanSpeed();
+    uint8_t fs = pHG->getFanSpeed();
     pEnc->reset(fs, 0, 255, 5, 20);
     mode_temp   = false;                                                    // By default adjust the fan speed
-	pHG->switchPower(true);
-	ready = false;
-	pD->clear();
-	forceRedraw();
+    pHG->switchPower(true);
+    ready = false;
+    pD->clear();
+    forceRedraw();
 }
 
-void workSCREEN::rotaryValue(int16_t value) {   							// Setup new preset temperature by rotating the encoder
-	if (mode_temp) {
+void workSCREEN::rotaryValue(int16_t value) {                               // Setup new preset temperature by rotating the encoder
+    if (mode_temp) {
         ready = false;
-		uint16_t temp = pCfg->tempInternal(value);      				    // Translate human readable temperature into internal value
-		pHG->setTemp(temp);
-		pD->tSet(value);
-	} else {
-		pHG->setFanSpeed(value);
-		pD->fanSpeed(value);
-	}
-	update_screen = millis() + period;
+        uint16_t temp = pCfg->tempInternal(value);                          // Translate human readable temperature into internal value
+        pHG->setTemp(temp);
+        pD->tSet(value);
+    } else {
+        pHG->setFanSpeed(value);
+        pD->fanSpeed(value);
+    }
+    update_screen = millis() + period;
 }
 
 SCREEN* workSCREEN::show(void) {
-	if (millis() < update_screen) return this;
-	update_screen = millis() + period;
+    if (millis() < update_screen) return this;
+    update_screen = millis() + period;
 
     int temp_set  = pHG->getTemp();
     int tempH_set = pCfg->tempHuman(temp_set);
@@ -1059,8 +1059,8 @@ SCREEN* workSCREEN::show(void) {
     int tempH     = pCfg->tempHuman(temp);
     pD->tCurr(tempH);
     pD->msgON();
-	uint8_t p 	= pHG->appliedPower();
-	pD->appliedPower(p);
+    uint8_t p = pHG->appliedPower();
+    pD->appliedPower(p);
     pD->fanSpeed(pHG->getFanSpeed());
 
 
@@ -1078,20 +1078,20 @@ Serial.print(", Dispersion = "); Serial.println(disp);
             return this;
         }
     }
-	return this;
+    return this;
 }
 
 SCREEN* workSCREEN::menu(void) {
-	if (mode_temp) {
-		uint8_t	fs = pHG->getFanSpeed();
-		pEnc->reset(fs, 0, 255, 5, 20);
-		mode_temp = false;
-	} else {
-		uint16_t temp_set   = pHG->getTemp();
-		uint16_t tempH 	    = pCfg->tempHuman(temp_set);
-		pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
-		mode_temp = true;
-	}
+    if (mode_temp) {
+        uint8_t fs = pHG->getFanSpeed();
+        pEnc->reset(fs, 0, 255, 5, 20);
+        mode_temp = false;
+    } else {
+        uint16_t temp_set   = pHG->getTemp();
+        uint16_t tempH      = pCfg->tempHuman(temp_set);
+        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+        mode_temp = true;
+    }
     return this;
 }
 
@@ -1103,18 +1103,18 @@ SCREEN* workSCREEN::reedSwitch(bool on) {
 
 //---------------------------------------- class errorSCREEN [the error detected] ------------------------------
 class errorSCREEN : public SCREEN {
-	public:
-		errorSCREEN(HOTGUN* HG, DSPL* DSP, BUZZER* Buzz) {
-			pHG 	= HG;
-			pD    	= DSP;
-			pBz   	= Buzz;
-		}
-		virtual void init(void)                                             { pHG->switchPower(false); pD->clear(); pD->msgFail(); pBz->failedBeep(); }
+    public:
+        errorSCREEN(HOTGUN* HG, DSPL* DSP, BUZZER* Buzz) {
+            pHG     = HG;
+            pD      = DSP;
+            pBz     = Buzz;
+        }
+        virtual void init(void)                                             { pHG->switchPower(false); pD->clear(); pD->msgFail(); pBz->failedBeep(); }
         virtual SCREEN* menu(void)                                          { if (this->next != 0)  return this->next;  else return this; }
-	private:
-		HOTGUN*    	pHG;                             						// Pointer to the got air gun instance
-		DSPL*    	pD;                                						// Pointer to the display instance
-		BUZZER*  	pBz;                               						// Pointer to the simple Buzzer instance
+    private:
+        HOTGUN*      pHG;                                                   // Pointer to the got air gun instance
+        DSPL*        pD;                                                    // Pointer to the display instance
+        BUZZER*      pBz;                                                   // Pointer to the simple Buzzer instance
 };
 
 //---------------------------------------- class configSCREEN [configuration menu] -----------------------------
@@ -1439,148 +1439,148 @@ SCREEN* tuneSCREEN::menu_long(void) {
 
 //---------------------------------------- class pidSCREEN [tune the PID coefficients] -------------------------
 class pidSCREEN : public SCREEN {
-	public:
-		pidSCREEN(HOTGUN* HG, ENCODER* ENC) {
-			pHG 	= HG;
-			pEnc  	= ENC;
-		}
-		virtual void    init(void);
-		virtual SCREEN* menu(void);
-		virtual SCREEN* menu_long(void);
-		virtual SCREEN* show(void);
-		virtual void    rotaryValue(int16_t value);
-	private:
-		void     	showCfgInfo(void);                 						// show the main config information: Temp set, fan speed and PID coefficients
-		HOTGUN*		pHG;                             						// Pointer to the IRON instance
-		ENCODER* 	pEnc;                              						// Pointer to the rotary encoder instance
-		uint8_t     mode;                              						// Which parameter to tune [0-5]: select element, Kp, Ki, Kd, temp, speed
-		uint32_t 	update_screen;                     						// Time in ms when to print thee info
-		int      	temp_set;
-		const uint16_t period = 1100;
+    public:
+        pidSCREEN(HOTGUN* HG, ENCODER* ENC) {
+            pHG     = HG;
+            pEnc    = ENC;
+        }
+        virtual void    init(void);
+        virtual SCREEN* menu(void);
+        virtual SCREEN* menu_long(void);
+        virtual SCREEN* show(void);
+        virtual void    rotaryValue(int16_t value);
+    private:
+        void        showCfgInfo(void);                                      // show the main config information: Temp set, fan speed and PID coefficients
+        HOTGUN*     pHG;                                                    // Pointer to the IRON instance
+        ENCODER*    pEnc;                                                   // Pointer to the rotary encoder instance
+        uint8_t     mode;                                                   // Which parameter to tune [0-5]: select element, Kp, Ki, Kd, temp, speed
+        uint32_t    update_screen;                                          // Time in ms when to print thee info
+        int         temp_set;
+        const uint16_t period = 1100;
 };
 
 void pidSCREEN::init(void) {
-	temp_set = pHG->getTemp();
-	mode = 0;                                     							// select the element from the list
-	pEnc->reset(1, 1, 5, 1, 1, true);             							// 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan
-	showCfgInfo();
-	Serial.println("");
+    temp_set = pHG->getTemp();
+    mode = 0;                                                               // select the element from the list
+    pEnc->reset(1, 1, 5, 1, 1, true);                                       // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan
+    showCfgInfo();
+    Serial.println("");
 }
 
 void pidSCREEN::rotaryValue(int16_t value) {
-	if (mode == 0) {                              							// select element from the menu
-		showCfgInfo();
-		switch (value) {
-			case 1:
-				Serial.println("Kp");
-				break;
-			case 2:
-				Serial.println("Ki");
-				break;
-			case 4:
-				Serial.println(F("Temp"));
-				break;
-			case 5:
-				Serial.println(F("Fan"));
+    if (mode == 0) {                                                        // select element from the menu
+        showCfgInfo();
+        switch (value) {
+            case 1:
+                Serial.println("Kp");
                 break;
-			case 3:
-			default:
-				Serial.println("Kd");
-			break;
-		}
-	} else {
-		switch (mode) {
-			case 1:
-				Serial.print(F("Kp = "));
-				pHG->changePID(mode, value);
-				break;
-			case 2:
-				Serial.print(F("Ki = "));
-				pHG->changePID(mode, value);
-				break;
-			case 4:
-				Serial.print(F("Temp = "));
-				temp_set = value;
-				pHG->setTemp(value);
-				break;
-			case 5:
-				Serial.print(F("Fan Speed = "));
-				pHG->setFanSpeed(value);
-				break;
-			case 3:
-			default:
-				Serial.print(F("Kd = "));
-				pHG->changePID(mode, value);
-				break;
-		}
-		Serial.println(value);
-	}
+            case 2:
+                Serial.println("Ki");
+                break;
+            case 4:
+                Serial.println(F("Temp"));
+                break;
+            case 5:
+                Serial.println(F("Fan"));
+                break;
+            case 3:
+            default:
+                Serial.println("Kd");
+            break;
+        }
+    } else {
+        switch (mode) {
+            case 1:
+                Serial.print(F("Kp = "));
+                pHG->changePID(mode, value);
+                break;
+            case 2:
+                Serial.print(F("Ki = "));
+                pHG->changePID(mode, value);
+                break;
+            case 4:
+                Serial.print(F("Temp = "));
+                temp_set = value;
+                pHG->setTemp(value);
+                break;
+            case 5:
+                Serial.print(F("Fan Speed = "));
+                pHG->setFanSpeed(value);
+                break;
+            case 3:
+            default:
+                Serial.print(F("Kd = "));
+                pHG->changePID(mode, value);
+                break;
+        }
+        Serial.println(value);
+    }
 }
 
 SCREEN* pidSCREEN::show(void) {
-	if (millis() < update_screen) return this;
-	update_screen = millis() + period;
-	if (pHG->isOn()) {
-		char buff[80];
-		int		 temp   = pHG->getCurrTemp();
-		uint8_t	 pwr 	= pHG->powerAverage();
-		uint8_t  fs		= pHG->getFanSpeed();
-		fs = map(fs, 0, 255, 0, 100);
-		sprintf(buff, "%3d: power = %3d%c, fan = %3d;", temp_set - temp, pwr, '%', fs);
-		Serial.println(buff);
-	}
-	return this;
+    if (millis() < update_screen) return this;
+    update_screen = millis() + period;
+    if (pHG->isOn()) {
+        char buff[80];
+        int      temp   = pHG->getCurrTemp();
+        uint8_t  pwr    = pHG->powerAverage();
+        uint8_t  fs     = pHG->getFanSpeed();
+        fs = map(fs, 0, 255, 0, 100);
+        sprintf(buff, "%3d: power = %3d%c, fan = %3d;", temp_set - temp, pwr, '%', fs);
+        Serial.println(buff);
+    }
+    return this;
 }
-SCREEN* pidSCREEN::menu(void) {                 							// The encoder button pressed
-	if (mode == 0) {                              							// select upper or lower temperature limit
-		mode = pEnc->read();
-		if (mode > 0 && mode < 4) {
-			int k = pHG->changePID(mode, -1);
-			pEnc->reset(k, 0, 10000, 1, 10);
-		} else if (mode == 4) {
-			pEnc->reset(temp_set, 0, 970, 1, 5);
-		} else {
-			pEnc->reset(pHG->getFanSpeed(), 0, 250, 5, 20);
-		}
-	} else {
-		mode = 0;
-		pEnc->reset(1, 1, 5, 1, 1, true);           						// 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan speed
-	}
-	return this;
+SCREEN* pidSCREEN::menu(void) {                                             // The encoder button pressed
+    if (mode == 0) {                                                        // select upper or lower temperature limit
+        mode = pEnc->read();
+        if (mode > 0 && mode < 4) {
+            int k = pHG->changePID(mode, -1);
+            pEnc->reset(k, 0, 10000, 1, 10);
+        } else if (mode == 4) {
+            pEnc->reset(temp_set, 0, 970, 1, 5);
+        } else {
+            pEnc->reset(pHG->getFanSpeed(), 0, 250, 5, 20);
+        }
+    } else {
+        mode = 0;
+        pEnc->reset(1, 1, 5, 1, 1, true);                                   // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan speed
+    }
+    return this;
 }
 
 SCREEN* pidSCREEN::menu_long(void) {
-	bool on = pHG->isOn();
-	pHG->switchPower(!on);
-	if (on)
-		Serial.println(F("The air gun is OFF"));
-	else
-		Serial.println(F("The air gun is ON"));
+    bool on = pHG->isOn();
+    pHG->switchPower(!on);
+    if (on)
+        Serial.println(F("The air gun is OFF"));
+    else
+        Serial.println(F("The air gun is ON"));
   return this;
 }
 
 void pidSCREEN::showCfgInfo(void) {
-	Serial.print(F("Temp set: "));
-	Serial.print(temp_set, DEC);
-	Serial.print(F(", fan speed = "));
-	Serial.print(pHG->getFanSpeed());
-	Serial.print(F(", PID: ["));
-	for (byte i = 1; i < 4; ++i) {
-		int k = pHG->changePID(i, -1);
-		Serial.print(k, DEC);
-		if (i < 3) Serial.print(", ");
-	}
-	Serial.print("]; ");
+    Serial.print(F("Temp set: "));
+    Serial.print(temp_set, DEC);
+    Serial.print(F(", fan speed = "));
+    Serial.print(pHG->getFanSpeed());
+    Serial.print(F(", PID: ["));
+    for (byte i = 1; i < 4; ++i) {
+        int k = pHG->changePID(i, -1);
+        Serial.print(k, DEC);
+        if (i < 3) Serial.print(", ");
+    }
+    Serial.print("]; ");
 }
 
 //=========================================================================================================
-HOTGUN 		hg(TEMP_GUN_PIN, HOT_GUN_PIN);
-DSPL       	disp;
-ENCODER    	rotEncoder(R_MAIN_PIN, R_SECD_PIN);
-BUTTON     	rotButton(R_BUTN_PIN);
-SWITCH      reedSwitch(REED_SW_PIN);
-HOTGUN_CFG 	hgCfg;
-BUZZER     	simpleBuzzer(BUZZER_PIN);
+HOTGUN     hg(TEMP_GUN_PIN, HOT_GUN_PIN);
+DSPL       disp;
+ENCODER    rotEncoder(R_MAIN_PIN, R_SECD_PIN);
+BUTTON     rotButton(R_BUTN_PIN);
+SWITCH     reedSwitch(REED_SW_PIN);
+HOTGUN_CFG hgCfg;
+BUZZER     simpleBuzzer(BUZZER_PIN);
 
 mainSCREEN   offScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 workSCREEN   wrkScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
@@ -1590,41 +1590,41 @@ tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
 pidSCREEN    pidScr(&hg,  &rotEncoder);
 
-SCREEN 	*pCurrentScreen = &offScr;
+SCREEN *pCurrentScreen = &offScr;
 
-volatile bool	end_of_power_period = false;
+volatile bool end_of_power_period = false;
 
 void syncAC(void) {
     end_of_power_period = hg.syncCB();
 }
 
 void rotEncChange(void) {
-	rotEncoder.changeINTR();
+    rotEncoder.changeINTR();
 }
 
 void setup() {
-	Serial.begin(115200);
-	disp.init();
+    Serial.begin(115200);
+    disp.init();
 
-	// Load configuration parameters
-	hgCfg.init();
-	hg.init();
-	uint16_t temp 	= hgCfg.tempPreset();
-	uint8_t  fan	= hgCfg.fanPreset();
-	hg.setTemp(temp);
-	hg.setFanSpeed(fan);
+    // Load configuration parameters
+    hgCfg.init();
+    hg.init();
+    uint16_t temp = hgCfg.tempPreset();
+    uint8_t  fan  = hgCfg.fanPreset();
+    hg.setTemp(temp);
+    hg.setFanSpeed(fan);
 
     reedSwitch.init(500);
 
-	// Initialize rotary encoder
-	rotEncoder.init();
-	rotButton.init();
-	delay(500);
-	attachInterrupt(digitalPinToInterrupt(R_MAIN_PIN), rotEncChange,   CHANGE);
+    // Initialize rotary encoder
+    rotEncoder.init();
+    rotButton.init();
+    delay(500);
+    attachInterrupt(digitalPinToInterrupt(R_MAIN_PIN), rotEncChange,   CHANGE);
     attachInterrupt(digitalPinToInterrupt(AC_SYNC_PIN), syncAC, RISING);
 
-	// Initialize SCREEN hierarchy
-	offScr.next     = &cfgScr;
+    // Initialize SCREEN hierarchy
+    offScr.next     = &cfgScr;
     offScr.on       = &wrkScr;
     wrkScr.next     = &offScr;
     cfgScr.next     = &offScr;
@@ -1632,26 +1632,26 @@ void setup() {
     cfgScr.tune     = &tuneScr;
     clbScr.next     = &offScr;
     tuneScr.next    = &offScr;
-	errScr.next     = &offScr;
+    errScr.next     = &offScr;
 
     pCurrentScreen->init();
 }
 
 void loop() {
-    static bool     reset_encoder   = true;
-	static int16_t  old_pos 	    = 0;
-	static uint32_t ac_check 	    = 5000;
+    static bool     reset_encoder = true;
+    static int16_t  old_pos       = 0;
+    static uint32_t ac_check      = 5000;
 
 
-	int16_t pos = rotEncoder.read();
+    int16_t pos = rotEncoder.read();
     if (reset_encoder) {
         old_pos = pos;
         reset_encoder = false;
     } else {
-	    if (old_pos != pos) {
-		    pCurrentScreen->rotaryValue(pos);
-		    old_pos = pos;
-	    }
+        if (old_pos != pos) {
+            pCurrentScreen->rotaryValue(pos);
+            old_pos = pos;
+        }
     }
 
     SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
@@ -1662,50 +1662,50 @@ void loop() {
         return;
     }
 
-	uint8_t bStatus = rotButton.buttonCheck();
-	switch (bStatus) {
-		case 2:                                     						// long press;
-			nxt = pCurrentScreen->menu_long();
-			if (nxt != pCurrentScreen) {
-				pCurrentScreen = nxt;
-				pCurrentScreen->init();
+    uint8_t bStatus = rotButton.buttonCheck();
+    switch (bStatus) {
+        case 2:                                                             // long press;
+            nxt = pCurrentScreen->menu_long();
+            if (nxt != pCurrentScreen) {
+                pCurrentScreen = nxt;
+                pCurrentScreen->init();
                 reset_encoder = true;
-			}
-			break;
-		case 1:                                     						// short press
-			nxt = pCurrentScreen->menu();
-			if (nxt != pCurrentScreen) {
-				pCurrentScreen = nxt;
-				pCurrentScreen->init();
+            }
+            break;
+        case 1:                                                             // short press
+            nxt = pCurrentScreen->menu();
+            if (nxt != pCurrentScreen) {
+                pCurrentScreen = nxt;
+                pCurrentScreen->init();
                 reset_encoder = true;
-			}
-			break;
-		case 0:                                     						// Not pressed
-		default:
-			break;
-	}
+            }
+            break;
+        case 0:                                                             // Not pressed
+        default:
+            break;
+    }
 
-	nxt = pCurrentScreen->show();
-	if (nxt && pCurrentScreen != nxt) {           							// Be paranoiac, the returned value must not be null
-		pCurrentScreen = nxt;
-		pCurrentScreen->init();
+    nxt = pCurrentScreen->show();
+    if (nxt && pCurrentScreen != nxt) {                                     // Be paranoiac, the returned value must not be null
+        pCurrentScreen = nxt;
+        pCurrentScreen->init();
         reset_encoder = true;
-	}
+    }
 
-	if (end_of_power_period) {												// Calculate the required power
-		hg.keepTemp();
-		end_of_power_period = false;
-	}
+    if (end_of_power_period) {                                              // Calculate the required power
+        hg.keepTemp();
+        end_of_power_period = false;
+    }
 
-	if (millis() > ac_check) {
-		ac_check = millis() + 1000;
-		if (!hg.areExternalInterrupts()) {
-			nxt = &errScr;
-			if (nxt != pCurrentScreen) {
-				pCurrentScreen = nxt;
-				pCurrentScreen->init();
+    if (millis() > ac_check) {
+        ac_check = millis() + 1000;
+        if (!hg.areExternalInterrupts()) {
+            nxt = &errScr;
+            if (nxt != pCurrentScreen) {
+                pCurrentScreen = nxt;
+                pCurrentScreen->init();
                 reset_encoder = true;
-			}
-		}
-	}
+            }
+        }
+    }
 }
