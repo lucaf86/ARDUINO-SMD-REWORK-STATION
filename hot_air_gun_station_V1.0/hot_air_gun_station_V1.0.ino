@@ -4,11 +4,21 @@
  */
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
 #include <CommonControls.h>
 #include <EEPROM.h>
-#include <SPI.h>
+#include <Adafruit_SSD1306.h>
+
+const uint8_t SCREEN_WIDTH  = 128;                                          // OLED display width, in pixels
+const uint8_t SCREEN_HEIGHT = 64;                                           // OLED display height, in pixels
+const uint8_t FONT_SIZE     = 1;                                            // Normal 1:1 pixel scale -> 6x8 px
+const uint8_t FONT_WIDTH    = 6;
+const uint8_t FONT_HEIGHT   = 8;
+const char DEGREE_CHAR      = 248;
+// TODO: Replace these with something nicer
+const char FAN_CHAR         = 15;
+const char POWER_CHAR       = 232;
+
+#define setCharCursor(x, y) setCursor(x*FONT_WIDTH, y*FONT_HEIGHT)
 
 const uint16_t temp_minC    = 150;
 const uint16_t temp_maxC    = 500;
@@ -347,11 +357,11 @@ void BUZZER::init(void) {
 }
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
-class DSPL : protected LiquidCrystal_I2C {
+class DSPL : protected Adafruit_SSD1306 {
     public:
-        DSPL(void) : LiquidCrystal_I2C(0x27, 16, 2) { }
+        DSPL(void) : Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT) { }
         void    init(void);
-        void    clear(void)                                                 { LiquidCrystal_I2C::clear(); }
+        void    clear(void)                                                 { clearDisplay(); }
         void    tSet(uint16_t t, bool Celsius = true);                      // Show the preset temperature
         void    tCurr(uint16_t t);                                          // Show the current temperature
         void    tInternal(uint16_t t);                                      // Show the current temperature in internal units
@@ -366,9 +376,9 @@ class DSPL : protected LiquidCrystal_I2C {
         void    msgFail(void);                                              // Show 'Fail' message
         void    msgTune(void);                                              // Show 'Tune' message
     private:
-        bool     full_second_line;                                           // Whether the second line is full with the message
+        bool     full_second_line;                                          // Whether the second line is full with the message
         char     temp_units;
-        const   uint8_t custom_symbols[3][8] = {
+/*        const   uint8_t custom_symbols[3][8] = {
                           { 0b00110,                                        // Degree
                             0b01001,
                             0b01001,
@@ -396,14 +406,20 @@ class DSPL : protected LiquidCrystal_I2C {
                             0b01000,
                             0b10000
                           }
-                        };
+                        };*/
 };
 
 void DSPL::init(void) {
-    LiquidCrystal_I2C::init();
-    LiquidCrystal_I2C::clear();
-    for (uint8_t i = 0; i < 3; ++i)
-        LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
+    begin(SSD1306_SWITCHCAPVCC, 0x3D);
+    clear();
+    // TODO: Add or use as bitmaps?
+    // for (uint8_t i = 0; i < 3; ++i)
+    //     LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
+
+    setTextSize(FONT_SIZE);
+    setTextColor(WHITE);
+    cp437(true);                                                            // Use full 256 char 'Code Page 437' font
+
     full_second_line = false;
     temp_units = 'C';
 }
@@ -415,94 +431,95 @@ void DSPL::tSet(uint16_t t, bool Celsius) {
     } else {
         temp_units = 'F';
     }
-    LiquidCrystal_I2C::setCursor(0, 0);
-    sprintf(buff, "Set:%3d%c%c", t, (char)1, temp_units);
-    LiquidCrystal_I2C::print(buff);
+    setCharCursor(0, 0);
+    sprintf(buff, "Set:%3d%c%c", t, DEGREE_CHAR, temp_units);
+    print(buff);
 }
 
 void DSPL::tCurr(uint16_t t) {
     char buff[6];
-    LiquidCrystal_I2C::setCursor(0, 1);
+    setCharCursor(0, 1);
     if (t < 1000) {
-        sprintf(buff, "%3d%c ", t, (char)1);
+        sprintf(buff, "%3d%c ", t, DEGREE_CHAR);
     } else {
-        LiquidCrystal_I2C::print(F("xxx"));
+        print(F("xxx"));
         return;
     }
-    LiquidCrystal_I2C::print(buff);
+    print(buff);
+    // TODO: This needs to change, partial clear?
     if (full_second_line) {
-        LiquidCrystal_I2C::print(F("           "));
+        print(F("           "));
         full_second_line = false;
     }
 }
 
 void DSPL::tInternal(uint16_t t) {
     char buff[6];
-    LiquidCrystal_I2C::setCursor(0, 1);
+    setCharCursor(0, 1);
     if (t < 1023) {
         sprintf(buff, "%4d ", t);
     } else {
-        LiquidCrystal_I2C::print(F("xxxx"));
+        print(F("xxxx"));
         return;
     }
-    LiquidCrystal_I2C::print(buff);
+    print(buff);
+    // TODO: This needs to change, partial clear?
     if (full_second_line) {
-        LiquidCrystal_I2C::print(F("           "));
+        print(F("           "));
         full_second_line = false;
     }
 }
 
 void DSPL::tReal(uint16_t t) {
     char buff[6];
-    LiquidCrystal_I2C::setCursor(11, 1);
+    setCharCursor(11, 1);
     if (t < 1000) {
-        sprintf(buff, ">%3d%c", t, (char)1);
+        sprintf(buff, ">%3d%c", t, DEGREE_CHAR);
     } else {
-        LiquidCrystal_I2C::print(F("xxx"));
+        print(F("xxx"));
         return;
     }
-    LiquidCrystal_I2C::print(buff);
+    print(buff);
 }
 
 void DSPL::fanSpeed(uint8_t s) {
     char buff[6];
     s = map(s, 0, 255, 0, 99);
-    sprintf(buff, " %c%2d%c", (char)2, s, '%');
-    LiquidCrystal_I2C::setCursor(11, 1);
-    LiquidCrystal_I2C::print(buff);
+    sprintf(buff, " %c%2d%c", FAN_CHAR, s, '%');
+    setCharCursor(11, 1);
+    print(buff);
 }
 
 void DSPL::appliedPower(uint8_t p, bool show_zero) {
     char buff[6];
     if (p > 99) p = 99;
-    LiquidCrystal_I2C::setCursor(5, 1);
+    setCharCursor(5, 1);
     if (p == 0 && !show_zero) {
-        LiquidCrystal_I2C::print(F("     "));
+        print(F("     "));
     } else {
-        sprintf(buff, " %c%2d%c", (char)3, p, '%');
-        LiquidCrystal_I2C::print(buff);
+	    sprintf(buff, " %c%2d%c", POWER_CHAR, p, '%');
+        print(buff);
     }
 }
-
 void DSPL::setupMode(byte mode) {
-    LiquidCrystal_I2C::clear();
-    LiquidCrystal_I2C::print(F("setup"));
-    LiquidCrystal_I2C::setCursor(1,1);
+    clear();
+    print(F("setup"));
+    setCharCursor(1, 1);
     switch (mode) {
         case 0:                                                             // tip calibrate
-            LiquidCrystal_I2C::print(F("calibrate"));
+            print(F("calibrate"));
             break;
         case 1:                                                             // tune
-            LiquidCrystal_I2C::print(F("tune"));
+            print(F("tune"));
             break;
         case 2:                                                             // save
-            LiquidCrystal_I2C::print(F("save"));
+            print(F("save"));
             break;
         case 3:                                                             // cancel
-            LiquidCrystal_I2C::print(F("cancel"));
+            print(F("cancel"));
             break;
         case 4:                                                             // set defaults
-            LiquidCrystal_I2C::print(F("reset config"));
+            print(F("reset config"));
             break;
         default:
             break;
@@ -510,34 +527,34 @@ void DSPL::setupMode(byte mode) {
 }
 
 void DSPL::msgON(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F("    ON"));
+    setCharCursor(10, 0);
+    print(F("    ON"));
 }
 
 void DSPL::msgOFF(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F("   OFF"));
+    setCharCursor(10, 0);
+    print(F("   OFF"));
 }
 
 
 void DSPL::msgReady(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F(" Ready"));
+    setCharCursor(10, 0);
+    print(F(" Ready"));
 }
 
 void DSPL::msgCold(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F("  Cold"));
+    setCharCursor(10, 0);
+    print(F("  Cold"));
 }
 
 void DSPL::msgFail(void) {
-    LiquidCrystal_I2C::setCursor(0, 1);
-    LiquidCrystal_I2C::print(F(" -== Failed ==- "));
+    setCharCursor(0, 1);
+    print(F(" -== Failed ==- "));
 }
 
 void DSPL::msgTune(void) {
-    LiquidCrystal_I2C::setCursor(0, 0);
-    LiquidCrystal_I2C::print(F("Tune"));
+    setCharCursor(0, 0);
+    print(F("Tune"));
 }
 
 //------------------------------------------ class HISTORY ----------------------------------------------------
