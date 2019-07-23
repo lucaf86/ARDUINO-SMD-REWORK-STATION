@@ -6,19 +6,21 @@
 #include <avr/interrupt.h>
 #include <CommonControls.h>
 #include <EEPROM.h>
-#include <Adafruit_SSD1306.h>
+#include <U8g2lib.h>
+#ifdef U8X8_HAVE_HW_I2C
+#include <Wire.h>
+#endif
 
 const uint8_t SCREEN_WIDTH  = 128;                                          // OLED display width, in pixels
 const uint8_t SCREEN_HEIGHT = 64;                                           // OLED display height, in pixels
-const uint8_t FONT_SIZE     = 1;                                            // Normal 1:1 pixel scale -> 6x8 px
 const uint8_t FONT_WIDTH    = 6;
 const uint8_t FONT_HEIGHT   = 8;
-const char DEGREE_CHAR      = 248;
+const char DEGREE_CHAR      = 176;
 // TODO: Replace these with something nicer
-const char FAN_CHAR         = 15;
-const char POWER_CHAR       = 232;
+const char FAN_CHAR         = 70;
+const char POWER_CHAR       = 80;
 
-#define setCharCursor(x, y) setCursor(x*FONT_WIDTH, y*FONT_HEIGHT)
+#define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
 
 const uint16_t temp_minC    = 150;
 const uint16_t temp_maxC    = 500;
@@ -357,11 +359,10 @@ void BUZZER::init(void) {
 }
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
-class DSPL : protected Adafruit_SSD1306 {
+class DSPL : public U8G2_SSD1306_128X64_NONAME_1_HW_I2C {
     public:
-        DSPL(void) : Adafruit_SSD1306(SCREEN_WIDTH, SCREEN_HEIGHT) { }
+        DSPL(void) : U8G2_SSD1306_128X64_NONAME_1_HW_I2C(U8G2_R0, /* reset=*/ U8X8_PIN_NONE) { }
         void    init(void);
-        void    clear(void)                                                 { clearDisplay(); }
         void    tSet(uint16_t t, bool Celsius = true);                      // Show the preset temperature
         void    tCurr(uint16_t t);                                          // Show the current temperature
         void    tInternal(uint16_t t);                                      // Show the current temperature in internal units
@@ -376,8 +377,7 @@ class DSPL : protected Adafruit_SSD1306 {
         void    msgFail(void);                                              // Show 'Fail' message
         void    msgTune(void);                                              // Show 'Tune' message
     private:
-        bool     full_second_line;                                          // Whether the second line is full with the message
-        char     temp_units;
+        char    temp_units;
 /*        const   uint8_t custom_symbols[3][8] = {
                           { 0b00110,                                        // Degree
                             0b01001,
@@ -410,17 +410,17 @@ class DSPL : protected Adafruit_SSD1306 {
 };
 
 void DSPL::init(void) {
-    begin(SSD1306_SWITCHCAPVCC, 0x3D);
-    clear();
+    begin();
     // TODO: Add or use as bitmaps?
     // for (uint8_t i = 0; i < 3; ++i)
     //     LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
 
-    setTextSize(FONT_SIZE);
-    setTextColor(WHITE);
-    cp437(true);                                                            // Use full 256 char 'Code Page 437' font
+    setFont(u8g2_font_5x8_tf);
+    setFontRefHeightExtendedText();
+    setDrawColor(1);
+    setFontPosTop();
+    setFontDirection(0);
 
-    full_second_line = false;
     temp_units = 'C';
 }
 
@@ -446,11 +446,6 @@ void DSPL::tCurr(uint16_t t) {
         return;
     }
     print(buff);
-    // TODO: This needs to change, partial clear?
-    if (full_second_line) {
-        print(F("           "));
-        full_second_line = false;
-    }
 }
 
 void DSPL::tInternal(uint16_t t) {
@@ -463,11 +458,6 @@ void DSPL::tInternal(uint16_t t) {
         return;
     }
     print(buff);
-    // TODO: This needs to change, partial clear?
-    if (full_second_line) {
-        print(F("           "));
-        full_second_line = false;
-    }
 }
 
 void DSPL::tReal(uint16_t t) {
@@ -501,28 +491,32 @@ void DSPL::appliedPower(uint8_t p, bool show_zero) {
         print(buff);
     }
 }
+
 void DSPL::setupMode(byte mode) {
-    clear();
-    print(F("setup"));
-    setCharCursor(1, 1);
-    switch (mode) {
-        case 0:                                                             // tip calibrate
-            print(F("calibrate"));
-            break;
-        case 1:                                                             // tune
-            print(F("tune"));
-            break;
-        case 2:                                                             // save
-            print(F("save"));
-            break;
-        case 3:                                                             // cancel
-            print(F("cancel"));
-            break;
-        case 4:                                                             // set defaults
-            print(F("reset config"));
-            break;
-        default:
-            break;
+    setCharCursor(0, 0);
+    print(F("Setup"));
+    for (byte i = 0; i < 5; ++i) {
+        setCharCursor(0, 2+i);
+        print(mode == i ? "*" : " ");
+        switch (i) {
+            case 0:                                                             // tip calibrate
+                print(F("Calibrate"));
+                break;
+            case 1:                                                             // tune
+                print(F("Tune"));
+                break;
+            case 2:                                                             // save
+                print(F("Save"));
+                break;
+            case 3:                                                             // cancel
+                print(F("Cancel"));
+                break;
+            case 4:                                                             // set defaults
+                print(F("Reset config"));
+                break;
+            default:
+                break;
+        }
     }
 }
 
@@ -896,7 +890,10 @@ class SCREEN {
         virtual SCREEN* menu_long(void)                                     { if (this->next != 0)  return this->next;  else return this; }
         virtual SCREEN* reedSwitch(bool on)                                 { return this; }
         virtual void    rotaryValue(int16_t value)                          { }
+        virtual void    draw(void) = 0;
         void            forceRedraw(void)                                   { update_screen = 0; }
+        void            display(DSPL &u8g2)                                 {  u8g2.firstPage(); do { draw(); } while(u8g2.nextPage()); }
+
     protected:
         uint32_t update_screen;                                             // Time in ms when the screen should be updated
         uint32_t scr_timeout;                                               // Timeout is sec. to return to the main screen, canceling all changes
@@ -918,6 +915,7 @@ class mainSCREEN : public SCREEN {
         virtual SCREEN* menu(void);
         virtual SCREEN* reedSwitch(bool on);
         virtual void    rotaryValue(int16_t value);                         // Setup the preset temperature
+        virtual void    draw(void);
         SCREEN*     on;                                                     // Screen mode when the power is
     private:
         HOTGUN*     pHG;                                                    // Pointer to the hot air gun instance
@@ -938,7 +936,7 @@ void mainSCREEN::init(void) {
     pHG->switchPower(false);
     uint16_t temp_set = pHG->getTemp();
     uint16_t tempH    = pCfg->tempHuman(temp_set);                          // The preset temperature in the human readable units
-    pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+    pEnc->reset(tempH, temp_minC, temp_maxC, 1, 10);
     used = !pCfg->isCold(pHG->tempAverage());
     cool_notified = !used;
     if (used) {                                                             // the hot gun was used, we should save new data in EEPROM
@@ -946,7 +944,6 @@ void mainSCREEN::init(void) {
     }
     mode_temp = true;
     clear_used_ms = 0;
-    pD->clear();
     forceRedraw();
 }
 
@@ -954,11 +951,10 @@ void mainSCREEN::rotaryValue(int16_t value) {
     if (mode_temp) {                                                        // set hot gun temperature
         uint16_t temp = pCfg->tempInternal(value);
         pHG->setTemp(temp);
-        pD->tSet(value);
     } else {                                                                // set fan speed
         pHG->setFanSpeed(value);
-        pD->fanSpeed(value);
     }
+    display(*pD);
     update_screen  = millis() + period;
 }
 
@@ -971,28 +967,29 @@ SCREEN* mainSCREEN::show(void) {
         used = false;
     }
 
-    uint16_t temp_set = pHG->getTemp();
-    pD->tSet(pCfg->tempHuman(temp_set));
-    uint16_t temp  = pHG->tempAverage();
-    uint16_t tempH = pCfg->tempHuman(temp);
-    if (pCfg->isCold(temp)) {
-        if (used) {
-            pD->msgCold();
-        } else {
-            pD->msgOFF();
-        }
+    if (pCfg->isCold(pHG->tempAverage())) {
         if (used && !cool_notified) {
             pBz->lowBeep();
             cool_notified = true;
             clear_used_ms = millis() + cool_notify_period;
         }
+    }
+    display(*pD);
+    return this;
+}
+
+void mainSCREEN::draw(void)
+{
+    uint16_t temp = pHG->tempAverage();
+    if (pCfg->isCold(temp) && used) {
+        pD->msgCold();
     } else {
         pD->msgOFF();
     }
-    pD->tCurr(tempH);
+    pD->tSet(pCfg->tempHuman(pHG->getTemp()));
+    pD->tCurr(pCfg->tempHuman(temp));
     pD->appliedPower(0, false);
     pD->fanSpeed(pHG->getFanSpeed());
-    return this;
 }
 
 SCREEN* mainSCREEN::menu(void) {
@@ -1003,7 +1000,7 @@ SCREEN* mainSCREEN::menu(void) {
     } else {                                                                // Prepare to adjust the preset temperature
         uint16_t temp_set   = pHG->getTemp();
         uint16_t tempH      = pCfg->tempHuman(temp_set);
-        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 10);
         mode_temp = true;
     }
     return this;
@@ -1031,6 +1028,7 @@ class workSCREEN : public SCREEN {
         virtual SCREEN* menu(void);
         virtual SCREEN* reedSwitch(bool on);
         virtual void    rotaryValue(int16_t value);                         // Change the preset temperature
+        virtual void    draw(void);
     private:
         HOTGUN*     pHG;                                                    // Pointer to the IRON instance
         DSPL*       pD;                                                     // Pointer to the DSPLay instance
@@ -1048,7 +1046,6 @@ void workSCREEN::init(void) {
     mode_temp   = false;                                                    // By default adjust the fan speed
     pHG->switchPower(true);
     ready = false;
-    pD->clear();
     forceRedraw();
 }
 
@@ -1057,12 +1054,21 @@ void workSCREEN::rotaryValue(int16_t value) {                               // S
         ready = false;
         uint16_t temp = pCfg->tempInternal(value);                          // Translate human readable temperature into internal value
         pHG->setTemp(temp);
-        pD->tSet(value);
     } else {
         pHG->setFanSpeed(value);
-        pD->fanSpeed(value);
     }
+    display(*pD);
     update_screen = millis() + period;
+}
+
+void workSCREEN::draw(void)
+{
+    pD->tSet(pCfg->tempHuman(pHG->getTemp()));
+    pD->tCurr(pCfg->tempHuman(pHG->tempAverage()));
+    pD->msgON();
+    pD->appliedPower(pHG->appliedPower());
+    pD->fanSpeed(pHG->getFanSpeed());
+    if (ready) pD->msgReady();
 }
 
 SCREEN* workSCREEN::show(void) {
@@ -1070,31 +1076,20 @@ SCREEN* workSCREEN::show(void) {
     update_screen = millis() + period;
 
     int temp_set  = pHG->getTemp();
-    int tempH_set = pCfg->tempHuman(temp_set);
-    pD->tSet(tempH_set);
     int temp      = pHG->tempAverage();
-    int tempH     = pCfg->tempHuman(temp);
-    pD->tCurr(tempH);
-    pD->msgON();
-    uint8_t p = pHG->appliedPower();
-    pD->appliedPower(p);
-    pD->fanSpeed(pHG->getFanSpeed());
-
-
-Serial.print("Diff = "); Serial.print(temp_set - temp);
-uint32_t disp = pHG->tempDispersion();
-Serial.print(", Dispersion = "); Serial.println(disp);
+    Serial.print("Diff = "); Serial.print(temp_set - temp);
+    uint32_t disp = pHG->tempDispersion();
+    Serial.print(", Dispersion = "); Serial.println(disp);
 
     if ((abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20))  {
         if (!ready) {
             pBz->shortBeep();
             ready = true;
-            pD->msgReady();
             Serial.println("Ready");
             update_screen = millis() + (period << 2);
-            return this;
         }
     }
+    display(*pD);
     return this;
 }
 
@@ -1106,7 +1101,7 @@ SCREEN* workSCREEN::menu(void) {
     } else {
         uint16_t temp_set   = pHG->getTemp();
         uint16_t tempH      = pCfg->tempHuman(temp_set);
-        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 10);
         mode_temp = true;
     }
     return this;
@@ -1126,8 +1121,9 @@ class errorSCREEN : public SCREEN {
             pD      = DSP;
             pBz     = Buzz;
         }
-        virtual void init(void)                                             { pHG->switchPower(false); pD->clear(); pD->msgFail(); pBz->failedBeep(); }
+        virtual void init(void)                                             { pHG->switchPower(false); display(*pD); pBz->failedBeep(); }
         virtual SCREEN* menu(void)                                          { if (this->next != 0)  return this->next;  else return this; }
+        virtual void    draw(void)                                          { pD->msgFail(); }
     private:
         HOTGUN*      pHG;                                                   // Pointer to the got air gun instance
         DSPL*        pD;                                                    // Pointer to the display instance
@@ -1147,6 +1143,7 @@ class configSCREEN : public SCREEN {
         virtual SCREEN* show(void);
         virtual SCREEN* menu(void);
         virtual void    rotaryValue(int16_t value);
+        virtual void    draw(void);
         SCREEN*         calib;                                              // Pointer to the calibration SCREEN
         SCREEN*         tune;                                               // Pointer to the tune SCREEN
     private:
@@ -1162,15 +1159,13 @@ void configSCREEN::init(void) {
     pHG->switchPower(false);
     mode = 0;
     pEnc->reset(mode, 0, 4, 1, 0, true);
-    pD->clear();
-    pD->setupMode(0);
     this->scr_timeout = 30;                                                 // This variable is defined in the superclass
 }
 
 SCREEN* configSCREEN::show(void) {
     if (millis() < update_screen) return this;
     update_screen = millis() + period;
-    pD->setupMode(mode);
+    display(*pD);
     return this;
 }
 
@@ -1201,6 +1196,10 @@ void configSCREEN::rotaryValue(int16_t value) {
     forceRedraw();
 }
 
+void configSCREEN::draw(void) {
+    pD->setupMode(mode);
+}
+
 //---------------------------------------- class calibSCREEN [ tip calibration ] -------------------------------
 class calibSCREEN : public SCREEN {
     public:
@@ -1214,6 +1213,7 @@ class calibSCREEN : public SCREEN {
         virtual void    init(void);
         virtual SCREEN* show(void);
         virtual void    rotaryValue(int16_t value);
+        virtual void    draw(void);
         virtual SCREEN* menu(void);
         virtual SCREEN* menu_long(void);
     private:
@@ -1242,8 +1242,6 @@ void calibSCREEN::init(void) {
     for (uint8_t i = 0; i < 3; ++i)
         calib_temp[0][i] = temp_tip[i];
     pCfg->getCalibrationData(&calib_temp[1][0]);
-    pD->clear();
-    pD->msgOFF();
     uint16_t temp = temp_tip[mode];
     preset_temp = pHG->getTemp();                                           // Preset Temp in internal units
     preset_temp = pCfg->tempHuman(preset_temp);                             // Save the preset temperature in Celsius
@@ -1257,32 +1255,19 @@ SCREEN* calibSCREEN::show(void) {
     update_screen       = millis() + period;
     int temp            = pHG->tempAverage();                               // The Hot gun average value of the current temp. (internal)
     int temp_set        = pHG->getTemp();                                   // The preset
-    uint16_t tempH      = pCfg->tempHuman(temp);
-    uint16_t temp_setH  = pCfg->tempHuman(temp_set);
-    pD->tSet(temp_setH);
-    pD->tCurr(tempH);
 
-    uint8_t p = pHG->appliedPower();
-    if (!pHG->isOn()) p = 0;
-    pD->appliedPower(p);
-    if (tune && (abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20) && (p > 1))  {
+    uint8_t p = pHG->isOn() ? pHG->appliedPower() : 0;
+    if (tune && (abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20) && (p > 1)) {
         if (!ready) {
             pBz->shortBeep();
-            pD->msgReady();
             ready = true;
             }
     }
-    if (ready) {
-        pD->tReal(pEnc->read());
-    } else {
-        if (pHG->isOn())
-            pD->fanSpeed(pHG->getFanSpeed());
-    }
     if (tune && !pHG->isOn()) {                                             // The hot gun was switched off by error
-        pD->msgOFF();
         tune  = false;
         ready = false;
     }
+    display(*pD);
     return this;
 }
 
@@ -1298,13 +1283,27 @@ void calibSCREEN::rotaryValue(int16_t value) {
     forceRedraw();
 }
 
+void calibSCREEN::draw(void) {
+    pD->tSet(pCfg->tempHuman(pHG->getTemp()));
+    pD->tCurr(pCfg->tempHuman(pHG->tempAverage()));
+    pD->appliedPower(pHG->isOn() ? pHG->appliedPower() : 0);
+    if (ready) {
+        pD->msgReady();
+        pD->tReal(pEnc->read());
+    } else {
+        if (pHG->isOn())
+            pD->fanSpeed(pHG->getFanSpeed());
+        else
+            pD->msgOFF();
+    }
+}
+
 SCREEN* calibSCREEN::menu(void) {
     if (tune) {                                                             // Calibrated value for the temperature limit jus has been setup
         tune = false;
         calib_temp[0][mode] = pEnc->read();                                 // Real temperature (Celsius)
         calib_temp[1][mode] = pHG->tempAverage();                           // The temperature on the hot gun
         pHG->switchPower(false);
-        pD->msgOFF();
         pEnc->reset(mode, 0, 2, 1, 0, true);                                // The temperature limit has been adjusted, switch to select mode
         uint16_t tip[3];
         buildCalibration(tip);
@@ -1316,7 +1315,6 @@ SCREEN* calibSCREEN::menu(void) {
         temp = pCfg->tempInternal(temp);
         pHG->setTemp(temp);
         pHG->switchPower(true);
-        pD->msgON();
     }
     ready = false;
     forceRedraw();
@@ -1384,6 +1382,7 @@ class tuneSCREEN : public SCREEN {
         virtual SCREEN* menu_long(void);
         virtual SCREEN* show(void);
         virtual void    rotaryValue(int16_t value);
+        virtual void    draw(void);
     private:
         HOTGUN*     pHG;                                                    // Pointer to the IRON instance
         DSPL*       pD;                                                     // Pointer to the display instance
@@ -1401,9 +1400,6 @@ void tuneSCREEN::init(void) {
     pEnc->reset(max_power >> 2, 0, max_power, 1, 2);                        // Rotate the encoder to change the power supplied
     on = false;
     heat_ms = 0;
-    pD->clear();
-    pD->msgTune();
-    pD->msgOFF();
     forceRedraw();
 }
 
@@ -1415,20 +1411,22 @@ void tuneSCREEN::rotaryValue(int16_t value) {
     forceRedraw();
 }
 
+void tuneSCREEN::draw(void) {
+    pD->msgTune();
+    if (on) pD->msgON(); else pD->msgOFF();
+    pD->tInternal(pHG->getCurrTemp());
+    pD->appliedPower(on ? pHG->appliedPower() : pEnc->read());
+}
+
 SCREEN* tuneSCREEN::show(void) {
     if (millis() < update_screen) return this;
     update_screen = millis() + period;
-    uint16_t temp   = pHG->getCurrTemp();
-    uint8_t  power  = pHG->appliedPower();
-    if (!on) {
-        power = pEnc->read();
-    }
-    pD->tInternal(temp);
-    pD->appliedPower(power);
+    uint8_t  power  = on ? pHG->appliedPower() : pEnc->read();
     if (heat_ms && ((millis() - heat_ms) > 3000) && (pHG->tempDispersion() < 10) && (power > 1)) {
         pBz->shortBeep();
         heat_ms = 0;
     }
+    display(*pD);
     return this;
 }
 
@@ -1436,13 +1434,11 @@ SCREEN* tuneSCREEN::menu(void) {                                            // T
     if (on) {
         pHG->fixPower(0);
         on = false;
-        pD->msgOFF();
     } else {
         on = true;
         heat_ms = millis();
         uint8_t power = pEnc->read();                                       // applied power
         pHG->fixPower(power);
-        pD->msgON();
     }
     return this;
 }
@@ -1466,6 +1462,7 @@ class pidSCREEN : public SCREEN {
         virtual SCREEN* menu_long(void);
         virtual SCREEN* show(void);
         virtual void    rotaryValue(int16_t value);
+        virtual void    draw(void) {}                                       //TODO: Implement if needed
     private:
         void        showCfgInfo(void);                                      // show the main config information: Temp set, fan speed and PID coefficients
         HOTGUN*     pHG;                                                    // Pointer to the IRON instance
@@ -1637,7 +1634,7 @@ void setup() {
     rotEncoder.init();
     rotButton.init();
     delay(500);
-    attachInterrupt(digitalPinToInterrupt(R_MAIN_PIN), rotEncChange,   CHANGE);
+    attachInterrupt(digitalPinToInterrupt(R_MAIN_PIN), rotEncChange, CHANGE);
     attachInterrupt(digitalPinToInterrupt(AC_SYNC_PIN), syncAC, RISING);
 
     // Initialize SCREEN hierarchy
@@ -1671,7 +1668,7 @@ void loop() {
         }
     }
 
-    SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
+    SCREEN* nxt = pCurrentScreen->reedSwitch(false /* reedSwitch.status()*/);
     if (nxt != pCurrentScreen) {
         pCurrentScreen = nxt;
         pCurrentScreen->init();
@@ -1716,7 +1713,7 @@ void loop() {
 
     if (millis() > ac_check) {
         ac_check = millis() + 1000;
-        if (!hg.areExternalInterrupts()) {
+        if (/*!hg.areExternalInterrupts()*/false) {
             nxt = &errScr;
             if (nxt != pCurrentScreen) {
                 pCurrentScreen = nxt;
