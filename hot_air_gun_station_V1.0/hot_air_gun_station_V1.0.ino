@@ -19,7 +19,8 @@ const char DEGREE_CHAR      = 176;
 // TODO: Replace these with something nicer
 const char FAN_CHAR         = 70;
 const char POWER_CHAR       = 80;
-
+#define LARGE_FONT          u8g2_font_9x15_tr
+#define STD_FONT            u8g2_font_5x8_tf
 #define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
 
 const uint16_t temp_minC    = 150;
@@ -38,6 +39,19 @@ const uint8_t R_BUTN_PIN    = 5;                                            // R
 
 const uint8_t REED_SW_PIN   = 11;                                           // Reed switch pin
 const uint8_t BUZZER_PIN    = 8;                                            // Buzzer pin
+
+//------------------------------------------ GFX ---------------------------------------------------------------
+#define hotairtempscale_width 16
+#define hotairtempscale_height 48
+static const unsigned char hotairtempscale_bits[] U8X8_PROGMEM = {
+   0x4e, 0xe4, 0xa2, 0x8a, 0xa4, 0x8a, 0xa8, 0x8a, 0x46, 0x84, 0x00, 0xc0,
+   0x00, 0x80, 0x4a, 0x84, 0xaa, 0x8a, 0xae, 0x8a, 0xa8, 0xea, 0x48, 0x84,
+   0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0xc0, 0x00, 0x80, 0x4e, 0x84,
+   0xa8, 0x8a, 0xa4, 0x8a, 0xa8, 0xea, 0x4e, 0x84, 0x00, 0x80, 0x00, 0x80,
+   0x00, 0x80, 0x00, 0xc0, 0x00, 0x80, 0x44, 0x84, 0xaa, 0x8a, 0xa8, 0x8a,
+   0xa4, 0xea, 0x4e, 0x84, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x00, 0xc0,
+   0x00, 0x80, 0x48, 0x84, 0xac, 0x8a, 0xa8, 0x8a, 0xa8, 0xea, 0x48, 0x84,
+   0x00, 0x80, 0xe0, 0x84, 0x20, 0x8a, 0x40, 0xca, 0x80, 0x8a, 0x60, 0x84 };
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -365,6 +379,7 @@ class DSPL : public U8G2_SSD1306_128X64_NONAME_1_HW_I2C {
         void    init(void);
         void    tSet(uint16_t t, bool Celsius = true);                      // Show the preset temperature
         void    tCurr(uint16_t t);                                          // Show the current temperature
+        void    tGraph(void);
         void    tInternal(uint16_t t);                                      // Show the current temperature in internal units
         void    tReal(uint16_t t);                                          // Show the real temperature in Celsius in calibrate mode
         void    fanSpeed(uint8_t s);                                        // Show the fan speed
@@ -377,7 +392,13 @@ class DSPL : public U8G2_SSD1306_128X64_NONAME_1_HW_I2C {
         void    msgFail(void);                                              // Show 'Fail' message
         void    msgTune(void);                                              // Show 'Tune' message
     private:
+        static const uint8_t tempValuesMaxLength = SCREEN_WIDTH-hotairtempscale_width;
+        static const uint8_t tempMinDisplayValue = 20;
+        static const uint8_t tempScaleValue = 10;
         char    temp_units;
+        uint8_t tempValuesLength = 0;
+        uint8_t tempValuesCurrentPos = 0;
+        uint8_t tempValues[tempValuesMaxLength];
 /*        const   uint8_t custom_symbols[3][8] = {
                           { 0b00110,                                        // Degree
                             0b01001,
@@ -415,7 +436,8 @@ void DSPL::init(void) {
     // for (uint8_t i = 0; i < 3; ++i)
     //     LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
 
-    setFont(u8g2_font_5x8_tf);
+    setBitmapMode(false /* solid */);
+    setFont(STD_FONT);
     setFontRefHeightExtendedText();
     setDrawColor(1);
     setFontPosTop();
@@ -446,6 +468,20 @@ void DSPL::tCurr(uint16_t t) {
         return;
     }
     print(buff);
+
+    tempValues[tempValuesCurrentPos++] = SCREEN_HEIGHT - 1 - (t - tempMinDisplayValue)/tempScaleValue;
+    if (tempValuesCurrentPos >= tempValuesMaxLength) tempValuesCurrentPos = 0;
+    if (tempValuesLength < tempValuesMaxLength) ++tempValuesLength;
+}
+
+void DSPL::tGraph(void) {
+    drawXBMP(0, SCREEN_HEIGHT - hotairtempscale_height, hotairtempscale_width, hotairtempscale_height, hotairtempscale_bits);
+    uint8_t x = tempValuesLength;
+    uint8_t pos = tempValuesCurrentPos;
+    while (x--) {
+        if (pos >= tempValuesLength) pos = 0;
+        drawPixel(hotairtempscale_width + x, tempValues[pos++]);
+    }
 }
 
 void DSPL::tInternal(uint16_t t) {
@@ -494,10 +530,12 @@ void DSPL::appliedPower(uint8_t p, bool show_zero) {
 
 void DSPL::setupMode(byte mode) {
     setCharCursor(0, 0);
+    setFont(LARGE_FONT);
     print(F("Setup"));
+    setFont(STD_FONT);
     for (byte i = 0; i < 5; ++i) {
         setCharCursor(0, 2+i);
-        print(mode == i ? "*" : " ");
+        print(mode == i ? ">" : " ");
         switch (i) {
             case 0:                                                             // tip calibrate
                 print(F("Calibrate"));
@@ -542,8 +580,9 @@ void DSPL::msgCold(void) {
 }
 
 void DSPL::msgFail(void) {
-    setCharCursor(0, 1);
-    print(F(" -== Failed ==- "));
+    setCharCursor(4*9/FONT_WIDTH, 0);
+    setFont(LARGE_FONT);
+    print(F("Failed"));
 }
 
 void DSPL::msgTune(void) {
@@ -1063,6 +1102,7 @@ void workSCREEN::rotaryValue(int16_t value) {                               // S
 
 void workSCREEN::draw(void)
 {
+    pD->tGraph();
     pD->tSet(pCfg->tempHuman(pHG->getTemp()));
     pD->tCurr(pCfg->tempHuman(pHG->tempAverage()));
     pD->msgON();
@@ -1451,6 +1491,7 @@ SCREEN* tuneSCREEN::menu_long(void) {
 }
 
 //---------------------------------------- class pidSCREEN [tune the PID coefficients] -------------------------
+#if 0
 class pidSCREEN : public SCREEN {
     public:
         pidSCREEN(HOTGUN* HG, ENCODER* ENC) {
@@ -1586,7 +1627,7 @@ void pidSCREEN::showCfgInfo(void) {
     }
     Serial.print("]; ");
 }
-
+#endif
 //=========================================================================================================
 HOTGUN     hg(TEMP_GUN_PIN, HOT_GUN_PIN);
 DSPL       disp;
@@ -1602,7 +1643,7 @@ configSCREEN cfgScr(&hg,  &disp, &rotEncoder, &hgCfg);
 calibSCREEN  clbScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
-pidSCREEN    pidScr(&hg,  &rotEncoder);
+// pidSCREEN    pidScr(&hg,  &rotEncoder);
 
 SCREEN *pCurrentScreen = &offScr;
 
@@ -1668,7 +1709,7 @@ void loop() {
         }
     }
 
-    SCREEN* nxt = pCurrentScreen->reedSwitch(false /* reedSwitch.status()*/);
+    SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
     if (nxt != pCurrentScreen) {
         pCurrentScreen = nxt;
         pCurrentScreen->init();
@@ -1713,7 +1754,7 @@ void loop() {
 
     if (millis() > ac_check) {
         ac_check = millis() + 1000;
-        if (/*!hg.areExternalInterrupts()*/false) {
+        if (!hg.areExternalInterrupts()) {
             nxt = &errScr;
             if (nxt != pCurrentScreen) {
                 pCurrentScreen = nxt;
