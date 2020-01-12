@@ -38,7 +38,7 @@ const uint8_t R_SECD_PIN    = 4;                                            // R
 const uint8_t R_BUTN_PIN    = 5;                                            // Rotary encoder button pin
 
 const uint8_t REED_SW_PIN   = 11;                                           // Reed switch pin
-const uint8_t BUZZER_PIN    = 8;                                            // Buzzer pin
+const uint8_t BUZZER_PIN    = 10;                                           // Buzzer pin
 
 //------------------------------------------ GFX ---------------------------------------------------------------
 #define hotairtempscale_width 16
