@@ -5,29 +5,50 @@
  */
 #include <avr/io.h>
 #include <avr/interrupt.h>
-#include <Wire.h>
-#include <LiquidCrystal_I2C.h>
+//#include <Wire.h> 
+//#include <LiquidCrystal_I2C.h>
 #include <CommonControls.h>
 #include <EEPROM.h>
 #include <SPI.h>
+#include <TFT_ST7735.h> 
 
-const uint16_t temp_minC    = 100;
-const uint16_t temp_maxC    = 500;
+
+
+//#define DISABLE_AC_CHECK
+
+#define SLOW_D9_PWM_FREQUENCY
+
+const uint8_t SCREEN_WIDTH  = ST7735_TFTWIDTH; //160;                                          //  display width, in pixels
+const uint8_t SCREEN_HEIGHT = ST7735_TFTHEIGHT; //128;                                          //  display height, in pixels
+const uint8_t FONT_WIDTH    = 8;
+const uint8_t FONT_HEIGHT   = 8;
+
+const char DEGREE_CHAR      = 248; //176
+// TODO: Replace these with something nicer
+const char FAN_CHAR         = 70;//15; //70
+const char POWER_CHAR       = 80;//232; //80
+
+
+#define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
+
+
+const uint16_t temp_minC 	= 100;
+const uint16_t temp_maxC	= 500;
 const uint16_t temp_ambC    = 25;
 const uint16_t temp_tip[3] = {200, 300, 400};                               // Temperature reference points for calibration
 const uint16_t min_working_fan = 100;                                       // Minimal possible fan speed
 
 const uint8_t AC_SYNC_PIN   = 2;                                            // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN   = 7;                                            // Hot gun heater management pin
-const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change!
-const uint8_t TEMP_GUN_PIN  = A0;                                           // Hot gun temperature checking pin
+const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change! 
+const uint8_t TEMP_GUN_PIN	= A0;                                           // Hot gun temperature checking pin
 
-const uint8_t R_MAIN_PIN    = 3;                                            // Rotary encoder main pin. Do not change!
-const uint8_t R_SECD_PIN    = 4;                                            // Rotary encoder secondary pin
-const uint8_t R_BUTN_PIN    = 5;                                            // Rotary encoder button pin
+const uint8_t R_MAIN_PIN	= 3;                                            // Rotary encoder main pin. Do not change!
+const uint8_t R_SECD_PIN	= 4;                                            // Rotary encoder secondary pin
+const uint8_t R_BUTN_PIN	= 5;                                            // Rotary encoder button pin
 
 const uint8_t REED_SW_PIN   = 8;                                            // Reed switch pin
-const uint8_t BUZZER_PIN    = 6;                                            // Buzzer pin
+const uint8_t BUZZER_PIN	= 6;                                            // Buzzer pin
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -363,11 +384,11 @@ void BUZZER::init(void) {
 }
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
-class DSPL : protected LiquidCrystal_I2C {
+class DSPL : protected TFT_ST7735 {
     public:
-        DSPL(void) : LiquidCrystal_I2C(0x27, 16, 2) { }
+        DSPL(void) : TFT_ST7735() { }
         void    init(void);
-        void    clear(void)                                                 { LiquidCrystal_I2C::clear(); }
+        void    clear(void)                                                 { TFT_ST7735::fillScreen(0x5AEB); setCharCursor(0, 0);}
         void    tSet(uint16_t t, bool Celsius = true);                      // Show the preset temperature
         void    tCurr(uint16_t t);                                          // Show the current temperature
         void    tInternal(uint16_t t);                                      // Show the current temperature in internal units
@@ -384,7 +405,7 @@ class DSPL : protected LiquidCrystal_I2C {
     private:
         bool 	full_second_line;                                           // Whether the second line is full with the message
 		char 	temp_units;
-        const   uint8_t custom_symbols[3][8] = {
+  /*      const   uint8_t custom_symbols[3][8] = {
                           { 0b00110,                                        // Degree
                             0b01001,
                             0b01001,
@@ -412,148 +433,160 @@ class DSPL : protected LiquidCrystal_I2C {
                             0b01000,
                             0b10000
                           }
-                        };
+                        };*/
 };
 
 void DSPL::init(void) {
-    LiquidCrystal_I2C::begin();
-    LiquidCrystal_I2C::clear();
-    for (uint8_t i = 0; i < 3; ++i)
-        LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
+    //LiquidCrystal_I2C::begin();
+    clear();
+    //for (uint8_t i = 0; i < 3; ++i)
+    //    LiquidCrystal_I2C::createChar(i+1, (uint8_t *)custom_symbols[i]);
+    TFT_ST7735::init();
+    TFT_ST7735::setRotation(1);
+    TFT_ST7735::fillScreen(0x5AEB); // grey color code
+    TFT_ST7735::setCursor(0, 0, 1); // Set "cursor" at top left corner of display (0,0) and select font 1
+    TFT_ST7735::setTextColor(TFT_WHITE);
+    TFT_ST7735::setTextColor(TFT_WHITE,TFT_BLACK);
+    TFT_ST7735::setTextFont(1);
+    TFT_ST7735::setTextSize(1);  
     full_second_line = false;
-    temp_units = 'C';
+	temp_units = 'C';
 }
 
 void DSPL::tSet(uint16_t t, bool Celsius) {
     char buff[10];
-    if (Celsius) {
-       temp_units = 'C';
-    } else {
-        temp_units = 'F';
-    }
-    LiquidCrystal_I2C::setCursor(0, 0);
-    sprintf(buff, "Set:%3d%c%c", t, (char)1, temp_units);
-    LiquidCrystal_I2C::print(buff);
+	if (Celsius) {
+		temp_units = 'C';
+	} else {
+		temp_units = 'F';
+	}
+    setCharCursor(0, 0);
+    sprintf(buff, "Set:%3d%c%c", t, DEGREE_CHAR, temp_units);
+    print(buff);
 }
 
 void DSPL::tCurr(uint16_t t) {
     char buff[6];
-    LiquidCrystal_I2C::setCursor(0, 1);
+    setCharCursor(0, 1);
     if (t < 1000) {
-        sprintf(buff, "%3d%c ", t, (char)1);
+        sprintf(buff, "%3d%c ", t, DEGREE_CHAR);
     } else {
-        LiquidCrystal_I2C::print(F("xxx"));
+        print(F("xxx"));
         return;
     }
-    LiquidCrystal_I2C::print(buff);
+    print(buff);
     if (full_second_line) {
-        LiquidCrystal_I2C::print(F("           "));
+        print(F("           "));
         full_second_line = false;
     }
 }
 
 void DSPL::tInternal(uint16_t t) {
     char buff[6];
-    LiquidCrystal_I2C::setCursor(0, 1);
+    setCharCursor(0, 1);
     if (t < 1023) {
         sprintf(buff, "%4d ", t);
     } else {
-        LiquidCrystal_I2C::print(F("xxxx"));
+        print(F("xxxx"));
         return;
     }
-    LiquidCrystal_I2C::print(buff);
+    print(buff);
     if (full_second_line) {
-        LiquidCrystal_I2C::print(F("           "));
+        print(F("           "));
         full_second_line = false;
     }
 }
 
 void DSPL::tReal(uint16_t t) {
     char buff[6];
-    LiquidCrystal_I2C::setCursor(11, 1);
+    setCharCursor(11, 1);
     if (t < 1000) {
-        sprintf(buff, ">%3d%c", t, (char)1);
+        sprintf(buff, ">%3d%c", t, DEGREE_CHAR);
     } else {
-        LiquidCrystal_I2C::print(F("xxx"));
+        print(F("xxx"));
         return;
     }
-    LiquidCrystal_I2C::print(buff);
+    print(buff);
 }
 
 void DSPL::fanSpeed(uint8_t s) {
     char buff[6];
     s = map(s, 0, 255, 0, 99);
-    sprintf(buff, " %c%2d%c", (char)2, s, '%');
-    LiquidCrystal_I2C::setCursor(11, 1);
-    LiquidCrystal_I2C::print(buff);
+    sprintf(buff, " %c%2d%c", FAN_CHAR, s, '%');
+    setCharCursor(11, 1);
+    print(buff);
 }
 
 void DSPL::appliedPower(uint8_t p, bool show_zero) {
 	char buff[6];
 	if (p > 99) p = 99;
-    LiquidCrystal_I2C::setCursor(5, 1);
+    setCharCursor(5, 1);
     if (p == 0 && !show_zero) {
-        LiquidCrystal_I2C::print(F("     "));
+        print(F("     "));
     } else {
-	    sprintf(buff, " %c%2d%c", (char)3, p, '%');
-        LiquidCrystal_I2C::print(buff);
+        sprintf(buff, " %c%2d%c", POWER_CHAR, p, '%');
+        print(buff);
     }
 }
 
 void DSPL::setupMode(byte mode) {
-    LiquidCrystal_I2C::clear();
-    LiquidCrystal_I2C::print(F("setup"));
-    LiquidCrystal_I2C::setCursor(1,1);
+    clear();
+    print(F("Setup"));
+    setCharCursor(1,1);
+    // for (byte i = 0; i < 5; ++i) {
+    // setCharCursor(0, 2+i);
+    //print(mode == i ? "*" : " ");
     switch (mode) {
         case 0:                                                             // tip calibrate
-            LiquidCrystal_I2C::print(F("calibrate"));
+            print(F("calibrate"));
             break;
         case 1:                                                             // tune
-            LiquidCrystal_I2C::print(F("tune"));
+            print(F("tune"));
             break;
         case 2:                                                             // save
-            LiquidCrystal_I2C::print(F("save"));
+            print(F("save"));
             break;
         case 3:                                                             // cancel
-            LiquidCrystal_I2C::print(F("cancel"));
+            print(F("cancel"));
             break;
         case 4:                                                             // set defaults
-            LiquidCrystal_I2C::print(F("reset config"));
+            print(F("reset config"));
             break;
         default:
             break;
     }
+//}
 }
 
 void DSPL::msgON(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F("    ON"));
+    setCharCursor(10, 0);
+    print(F("    ON"));
 }
 
 void DSPL::msgOFF(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F("   OFF"));
+    setCharCursor(10, 0);
+    print(F("   OFF"));
 }
 
 
 void DSPL::msgReady(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F(" Ready"));
+    setCharCursor(10, 0);
+    print(F(" Ready"));
 }
 
 void DSPL::msgCold(void) {
-    LiquidCrystal_I2C::setCursor(10, 0);
-    LiquidCrystal_I2C::print(F("  Cold"));
+    setCharCursor(10, 0);
+    print(F("  Cold"));
 }
 
 void DSPL::msgFail(void) {
-    LiquidCrystal_I2C::setCursor(0, 1);
-    LiquidCrystal_I2C::print(F(" -== Failed ==- "));
+    setCharCursor(0, 1);
+    print(F(" -== Failed ==- "));
 }
 
 void DSPL::msgTune(void) {
-    LiquidCrystal_I2C::setCursor(0, 0);
-    LiquidCrystal_I2C::print(F("Tune"));
+    setCharCursor(0, 0);
+    print(F("Tune"));
 }
 
 //------------------------------------------ class HISTORY ----------------------------------------------------
@@ -679,7 +712,7 @@ int PID::changePID(uint8_t p, int k) {
 
 long PID::reqPower(int temp_set, int temp_curr) {
     if (temp_h0 == 0) {
-        // When the temperature is near the preset one, reset the PID and prepare iterative formula
+        // When the temperature is near the preset one, reset the PID and prepare iterative formula                        
         if ((temp_set - temp_curr) < 30) {
             if (!pid_iterate) {
                 pid_iterate = true;
@@ -721,7 +754,11 @@ void FastPWM_D9::init(void) {
     TCCR1B  = _BV(WGM13);                           // set mode as phase and frequency correct pwm, stop the timer
     TCCR1A  = 0;
     ICR1    = 256;
+#ifdef SLOW_D9_PWM_FREQUENCY
+    TCCR1B   = _BV(WGM13) | _BV(CS12) | _BV(CS10);  // Top value = ICR1, prescale = 1024 (30.5 Hz)
+#else
     TCCR1B  = _BV(WGM13) | _BV(CS10);               // Top value = ICR1, prescale = 1
+#endif
     TCCR1A |= _BV(COM1A1);                          // XOR D9 on OCR1A, detached from D10
     OCR1A   = 0;                                    // Switch-off the signal on pin 9;
     interrupts();
@@ -733,15 +770,15 @@ class HOTGUN : public PID {
         typedef enum { POWER_OFF, POWER_ON, POWER_FIXED, POWER_COOLING } PowerMode;
         HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin);
         void        init(void);
-        bool        isOn(void)                                              { return (mode == POWER_ON || mode == POWER_FIXED);             }
-        void        setTemp(uint16_t temp)                                  { temp_set  = constrain(temp, 0, int_temp_max);                 }
-        uint16_t    getTemp(void)                                           { return temp_set;                                              }
-        uint16_t    getCurrTemp(void)                                       { return h_temp.last();                                         }
-        uint16_t    tempAverage(void)                                       { return h_temp.average();                                      }
+		bool		isOn(void)												{ return (mode == POWER_ON || mode == POWER_FIXED);             }
+		void        setTemp(uint16_t temp)                                  { temp_set  = constrain(temp, 0, int_temp_max);                 }
+		uint16_t	getTemp(void)											{ return temp_set;                                              }
+		uint16_t	getCurrTemp(void)										{ return h_temp.last();                                         }
+		uint16_t 	tempAverage(void)                  						{ return h_temp.average();                                      }
         uint8_t     powerAverage(void)                                      { return h_power.average();                                     }
-        uint8_t     appliedPower(void)                                      { return actual_power;                                          }
-        void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_fan_speed);   }
-        uint8_t     getFanSpeed(void)                                       { return fan_speed;                                             }
+		uint8_t     appliedPower(void)                						{ return actual_power;                                          }
+		void		setFanSpeed(uint8_t f)									{ fan_speed = constrain(f, min_working_fan, max_fan_speed);   }
+		uint8_t	    getFanSpeed(void)   									{ return fan_speed;                                             }
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion();                                   }
         bool        isCold(void)                                            { return h_temp.average() < temp_gun_cold;                      }
         bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 15;                  }
@@ -750,19 +787,19 @@ class HOTGUN : public PID {
         void        fixPower(uint8_t Power);                                // Set the specified power to the the hot gun
 		void     	keepTemp(void);
         uint8_t     getMaxFixedPower(void)                                  { return max_fix_power; }
-        bool        syncCB(void);                                           // Return true at the end of the power period
+        bool        syncCB(void);											// Return true at the end of the power period
     private:
         bool        isGunConnected(void)                                    { return true; }
         void        shutdown(void);
         uint16_t    emulateTemp(void);                                      // To debug the project, simulate the Hot Air Gun heating process
         FastPWM_D9  hg_fan;
-        uint16_t    temp_set;                                               // The preset temperature of the hot air gun (internal units)
-        uint8_t     fan_speed;
+		uint16_t	temp_set;												// The preset temperature of the hot air gun (internal units)
+		uint8_t		fan_speed;
         uint8_t     sen_pin;
-        uint8_t     gun_pin;
-        HISTORY     h_power;                                                // The history queue of power applied values
-        HISTORY     h_temp;                                                 // The history queue of the temperature
-        volatile    uint8_t     cnt;
+		uint8_t		gun_pin;
+		HISTORY  	h_power;                           						// The history queue of power applied values
+		HISTORY  	h_temp;                            						// The history queue of the temperature
+		volatile    uint8_t     cnt;
         volatile    uint8_t     actual_power;
         volatile    bool        active;
         uint8_t     actual_fan  = 0;                                        // Power applied to the fan (can be turned off)
@@ -1822,6 +1859,7 @@ void loop() {
 
 	if (millis() > ac_check) {
 		ac_check = millis() + 1000;
+#ifndef DISABLE_AC_CHECK
 		if (!hg.areExternalInterrupts()) {
 			nxt = &errScr;
 			if (nxt != pCurrentScreen) {
@@ -1830,5 +1868,6 @@ void loop() {
                 reset_encoder = true;
 			}
 		}
+#endif
 	}
 }
