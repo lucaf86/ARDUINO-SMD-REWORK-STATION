@@ -1,6 +1,7 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Released November 5, 2018
+ * Version 1.0.2
+ * Released Sept 10, 2020
  */
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -20,7 +21,7 @@ const char DEGREE_CHAR      = 248; //176
 const char FAN_CHAR         = 70;//15; //70
 const char POWER_CHAR       = 80;//232; //80
 #define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
-const uint16_t temp_minC 	= 150;
+const uint16_t temp_minC 	= 100;
 const uint16_t temp_maxC	= 500;
 const uint16_t temp_ambC    = 25;
 const uint16_t temp_tip[3] = {200, 300, 400};                               // Temperature reference points for calibration
@@ -318,7 +319,7 @@ void HOTGUN_CFG::saveCalibrationData(uint16_t tip[3]) {
     cd |= tip[0];
     Config.calibration = cd;
     t_tip[0] = tip[0];
-    t_tip[2] = tip[1];
+    t_tip[1] = tip[1];
     t_tip[2] = tip[2];
 }
 
@@ -339,14 +340,12 @@ class BUZZER {
   public:
     BUZZER(byte buzzerP)  { buzzer_pin = buzzerP; }
     void init(void);
-    void shortBeep(void)  { digitalWrite(buzzer_pin, HIGH); delay(80);  digitalWrite(buzzer_pin, LOW); }
-    void lowBeep(void)    { digitalWrite(buzzer_pin, HIGH); delay(160); digitalWrite(buzzer_pin, LOW); }
-    void doubleBeep(void) { digitalWrite(buzzer_pin, HIGH); delay(160); digitalWrite(buzzer_pin, LOW); delay(150);
-                            digitalWrite(buzzer_pin, HIGH); delay(160); digitalWrite(buzzer_pin, LOW);
-                          }
-    void failedBeep(void) { digitalWrite(buzzer_pin, HIGH); delay(170); digitalWrite(buzzer_pin, LOW); delay(10);
-                            digitalWrite(buzzer_pin, HIGH); delay(80);  digitalWrite(buzzer_pin, LOW); delay(100);
-                            digitalWrite(buzzer_pin, HIGH); delay(80);  digitalWrite(buzzer_pin, LOW);
+    void shortBeep(void)  { tone(buzzer_pin, 3520, 160); }
+    void lowBeep(void)    { tone(buzzer_pin,  880, 160); }
+    void doubleBeep(void) { tone(buzzer_pin, 3520, 160); delay(300); tone(buzzer_pin, 3520, 160); }
+    void failedBeep(void) { tone(buzzer_pin, 3520, 160); delay(170);
+                            tone(buzzer_pin,  880, 250); delay(260);
+                            tone(buzzer_pin, 3520, 160);
                           }
   private:
     byte buzzer_pin;
@@ -738,7 +737,7 @@ class HOTGUN : public PID {
         HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin);
         void        init(void);
 		bool		isOn(void)												{ return on; }
-		void		setTemp(uint16_t t)										{ temp_set = t; }
+		void		setTemp(uint16_t t)										{ temp_set = constrain(t, 0, int_temp_max); }
 		uint16_t	getTemp(void)											{ return temp_set; }
 		uint16_t	getCurrTemp(void)										{ return h_temp.last(); }
 		uint16_t 	tempAverage(void)                  						{ return h_temp.average(); }
@@ -769,8 +768,9 @@ class HOTGUN : public PID {
         bool        on, fan, fix_power;
         bool        chill;                                                  // To chill the hot gun
         uint32_t    last_period;                                            // The time in ms when the counter reset
-        const       uint8_t     period 			= 100;
-		const		uint8_t		min_fan_speed	= 30;
+        const       uint8_t     period          = 100;
+	const       uint16_t    int_temp_max    = 900;                      // The raw ADC temp value 900 corresponds to about 400°C
+	const       uint8_t     min_fan_speed	= 30;
         const       uint16_t    max_fan_speed   = 255;
         const       uint16_t    temp_gun_cold   = 80;                       // The temperature of the cold iron
 };
