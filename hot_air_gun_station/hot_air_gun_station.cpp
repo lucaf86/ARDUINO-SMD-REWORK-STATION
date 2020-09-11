@@ -1,6 +1,6 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 1.0.2
+ * Version 1.0.3
  * Released Sept 10, 2020
  */
 #include <avr/io.h>
@@ -259,17 +259,34 @@ uint8_t HOTGUN_CFG::fanPreset(void) {
 }
 
 uint16_t HOTGUN_CFG::tempInternal(uint16_t t) {                             // Translate the human readable temperature into internal value
-    uint16_t temp = t;
     t = constrain(t, temp_minC, temp_maxC);
-    if (t >= temp_tip[1])
-        temp = map(t+1, temp_tip[1], temp_tip[2], t_tip[1], t_tip[2]);
-    else
-        temp = map(t+1, temp_tip[0], temp_tip[1], t_tip[0], t_tip[1]);
+    uint16_t left   = 0;
+    uint16_t right  = 1023;                                                 // Maximum temperature value in internal units
+    uint16_t temp = map(t, temp_tip[0], temp_tip[2], t_tip[0], t_tip[2]);
+    if (temp > (left+right)/ 2) {
+        temp -= (right-left) / 4;
+    } else {
+        temp += (right-left) / 4;
+    }
 
-    for (uint8_t i = 0; i < 10; ++i) {
-        uint16_t tH = tempHuman(temp);
-        if (tH <= t) break;
-        --temp;
+    for (uint8_t i = 0; i < 20; ++i) {
+        uint16_t tempH = tempHuman(temp);
+        if (tempH == t) {
+            return temp;
+        }
+        uint16_t new_temp;
+        if (tempH < t) {
+            left = temp;
+             new_temp = (left+right)/2;
+            if (new_temp == temp)
+                new_temp = temp + 1;
+        } else {
+            right = temp;
+            new_temp = (left+right)/2;
+            if (new_temp == temp)
+                new_temp = temp - 1;
+        }
+        temp = new_temp;
     }
     return temp;
 }
@@ -333,6 +350,8 @@ void HOTGUN_CFG::setDefaults(bool Write) {
     if (Write) {
         CONFIG::save();
     }
+    for (uint8_t i = 0; i < 3; ++i)
+        t_tip[i] = def_tip[i];
 }
 
 //------------------------------------------ class BUZZER ------------------------------------------------------
@@ -362,8 +381,8 @@ class DSPL : protected TFT_ST7735 {
         DSPL(void) : TFT_ST7735() { }
         void    init(void);
         void    clear(void)                                                 { TFT_ST7735::fillScreen(0x5AEB); setCharCursor(0, 0);}
-        void    tSet(uint16_t t, bool Celsius = true);                      // Show the preset temperature
-        void    tCurr(uint16_t t);                                          // Show the current temperature
+        void    tSet(uint16_t t, uint16_t tInt = 1234, bool Celsius = true);// Show the preset temperature
+        void    tCurr(uint16_t t, uint16_t tInt = 1234);                                          // Show the current temperature
         void    tInternal(uint16_t t);                                      // Show the current temperature in internal units
         void    tReal(uint16_t t);                                          // Show the real temperature in Celsius in calibrate mode
         void    fanSpeed(uint8_t s);                                        // Show the fan speed
@@ -426,8 +445,9 @@ void DSPL::init(void) {
 	temp_units = 'C';
 }
 
-void DSPL::tSet(uint16_t t, bool Celsius) {
+void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
     char buff[10];
+	char buff1[12];
 	if (Celsius) {
 		temp_units = 'C';
 	} else {
@@ -436,10 +456,14 @@ void DSPL::tSet(uint16_t t, bool Celsius) {
     setCharCursor(0, 0);
     sprintf(buff, "Set:%3d%c%c", t, DEGREE_CHAR, temp_units);
     print(buff);
+	setCharCursor(0, 2);
+	sprintf(buff1, "SetInt:%4d", t, tInt);
+    print(buff1);
 }
 
-void DSPL::tCurr(uint16_t t) {
+void DSPL::tCurr(uint16_t t, uint16_t tInt) {
     char buff[6];
+	char buff1[12];
     setCharCursor(0, 1);
     if (t < 1000) {
         sprintf(buff, "%3d%c ", t, DEGREE_CHAR);
@@ -448,6 +472,9 @@ void DSPL::tCurr(uint16_t t) {
         return;
     }
     print(buff);
+	setCharCursor(0, 3);
+	sprintf(buff1, "CurInt:%4d", t, tInt);
+    print(buff1);
     if (full_second_line) {
         print(F("           "));
         full_second_line = false;
@@ -769,6 +796,7 @@ class HOTGUN : public PID {
         bool        chill;                                                  // To chill the hot gun
         uint32_t    last_period;                                            // The time in ms when the counter reset
         const       uint8_t     period          = 100;
+	const       uint8_t     min_fan_speed	= 30;
 	const       uint16_t    int_temp_max    = 900;                      // The raw ADC temp value 900 corresponds to about 400°C
 	const       uint8_t     min_fan_speed	= 30;
         const       uint16_t    max_fan_speed   = 255;
@@ -961,7 +989,7 @@ void mainSCREEN::rotaryValue(int16_t value) {
 	if (mode_temp) {														// set hot gun temperature
 		uint16_t temp = pCfg->tempInternal(value);
 		pHG->setTemp(temp);
-		pD->tSet(value);
+		pD->tSet(value, temp);
 	} else {																// set fan speed
 		pHG->setFanSpeed(value);
 		pD->fanSpeed(value);
@@ -979,7 +1007,7 @@ SCREEN* mainSCREEN::show(void) {
 	}
 
     uint16_t temp_set = pHG->getTemp();
-    pD->tSet(pCfg->tempHuman(temp_set));
+    pD->tSet(pCfg->tempHuman(temp_set), temp_set);
 	uint16_t temp  = pHG->tempAverage();
 	uint16_t tempH = pCfg->tempHuman(temp);
 	if (pCfg->isCold(temp)) {
@@ -996,7 +1024,7 @@ SCREEN* mainSCREEN::show(void) {
 	} else {
         pD->msgOFF();
 	}
-	pD->tCurr(tempH);
+	pD->tCurr(tempH, temp);
     pD->appliedPower(0, false);
     pD->fanSpeed(pHG->getFanSpeed());
 	return this;
@@ -1064,7 +1092,7 @@ void workSCREEN::rotaryValue(int16_t value) {   							// Setup new preset tempe
         ready = false;
 		uint16_t temp = pCfg->tempInternal(value);      				    // Translate human readable temperature into internal value
 		pHG->setTemp(temp);
-		pD->tSet(value);
+		pD->tSet(value, temp);
 	} else {
 		pHG->setFanSpeed(value);
 		pD->fanSpeed(value);
@@ -1078,10 +1106,10 @@ SCREEN* workSCREEN::show(void) {
 
     int temp_set  = pHG->getTemp();
     int tempH_set = pCfg->tempHuman(temp_set);
-    pD->tSet(tempH_set);
+    pD->tSet(tempH_set, temp_set);
     int temp      = pHG->tempAverage();
     int tempH     = pCfg->tempHuman(temp);
-    pD->tCurr(tempH);
+    pD->tCurr(tempH, temp);
     pD->msgON();
 	uint8_t p 	= pHG->appliedPower();
 	pD->appliedPower(p);
@@ -1266,8 +1294,8 @@ SCREEN* calibSCREEN::show(void) {
     int temp_set        = pHG->getTemp();                                   // The preset
     uint16_t tempH      = pCfg->tempHuman(temp);
     uint16_t temp_setH  = pCfg->tempHuman(temp_set);
-    pD->tSet(temp_setH);
-    pD->tCurr(tempH);
+    pD->tSet(temp_setH, temp_set);
+    pD->tCurr(tempH, temp);
 
     uint8_t p = pHG->appliedPower();
     if (!pHG->isOn()) p = 0;
