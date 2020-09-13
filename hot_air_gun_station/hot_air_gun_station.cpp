@@ -1,16 +1,19 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 1.0.5
+ * Version 1.1.0
  * Released Sept 10, 2020
  */
 #include <avr/io.h>
 #include <avr/interrupt.h>
-//#include <Wire.h> 
+#include <Wire.h> 
 //#include <LiquidCrystal_I2C.h>
 #include <CommonControls.h>
 #include <EEPROM.h>
 #include <SPI.h>
 #include <TFT_ST7735.h> 
+#include <Adafruit_MAX31855.h>
+
+
 
 #define SLOW_D9_PWM_FREQUENCY
 const uint8_t SCREEN_WIDTH  = ST7735_TFTWIDTH; //160;                                          //  display width, in pixels
@@ -38,6 +41,10 @@ const uint8_t R_BUTN_PIN	= 5;                                            // Rota
 
 const uint8_t REED_SW_PIN   = 8;                                            // Reed switch pin
 const uint8_t BUZZER_PIN	= 6;                                            // Buzzer pin
+
+#define MAXCS A3
+// Initialize the Thermocouple
+Adafruit_MAX31855 thermocouple(MAXCS);
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -217,12 +224,12 @@ class HOTGUN_CFG : public CONFIG {
         void     setDefaults(bool Write);                                   // Set default parameter values if failed to load data from EEPROM
     private:
         uint16_t t_tip[3];
-        const   uint16_t def_tip[3] = {55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
-        const   uint16_t min_temp  = 50;
-        const   uint16_t max_temp  = 900;
-        const   uint16_t def_temp  = 600;                                   // Default preset temperature
+        const   uint16_t def_tip[3] = {200, 300, 400};//{55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
+        const   uint16_t min_temp  = 150;
+        const   uint16_t max_temp  = 500;//900;
+        const   uint16_t def_temp  = 190;//600;                                   // Default preset temperature
         const   uint8_t  def_fan   = 64;                                  	// Default preset fan speed 0 - 255
-        const   uint16_t ambient_temp = 0;
+        const   uint16_t ambient_temp = 25;//0;
         const   uint16_t ambient_tempC= 25;
 };
 
@@ -259,8 +266,12 @@ uint8_t HOTGUN_CFG::fanPreset(void) {
 }
 
 uint16_t HOTGUN_CFG::tempInternal(uint16_t t) {                             // Translate the human readable temperature into internal value
+
     uint16_t temp = t;
     t = constrain(t, temp_minC, temp_maxC);
+
+    return t;
+
     if (t >= temp_tip[1])
         temp = map(t+1, temp_tip[1], temp_tip[2], t_tip[1], t_tip[2]);
     else
@@ -276,6 +287,7 @@ uint16_t HOTGUN_CFG::tempInternal(uint16_t t) {                             // T
 
 // Thanslate temperature from internal units to the human readable value (Celsius or Fahrenheit)
 uint16_t HOTGUN_CFG::tempHuman(uint16_t temp) {
+    return temp;
     uint16_t tempH = 0;
     if (temp <= ambient_temp) {
         tempH = ambient_tempC;
@@ -846,7 +858,18 @@ void HOTGUN::switchPower(bool On) {
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
 
-	uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+	//uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+    double c = thermocouple.readCelsius();
+    uint16_t temp;
+
+    if (isnan(c)){
+        temp = 888;
+    }
+    else
+    {
+        temp = (uint16_t)(c);
+    }
+    
 
     h_temp.put(temp);
     if (!chill && on && temp > temp_set + 20) {
@@ -1678,6 +1701,8 @@ void setup() {
     tuneScr.next    = &offScr;
 	errScr.next     = &offScr;
 
+    thermocouple.begin();
+    
     pCurrentScreen->init();
 }
 
