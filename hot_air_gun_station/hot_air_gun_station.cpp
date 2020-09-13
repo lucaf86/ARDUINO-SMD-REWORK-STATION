@@ -1,6 +1,6 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 1.0.4
+ * Version 1.0.5
  * Released Sept 10, 2020
  */
 #include <avr/io.h>
@@ -217,7 +217,7 @@ class HOTGUN_CFG : public CONFIG {
         void     setDefaults(bool Write);                                   // Set default parameter values if failed to load data from EEPROM
     private:
         uint16_t t_tip[3];
-        const   uint16_t def_tip[3] = {587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
+        const   uint16_t def_tip[3] = {55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
         const   uint16_t min_temp  = 50;
         const   uint16_t max_temp  = 900;
         const   uint16_t def_temp  = 600;                                   // Default preset temperature
@@ -375,6 +375,7 @@ class DSPL : protected TFT_ST7735 {
         void    msgCold(void);
         void    msgFail(void);                                              // Show 'Fail' message
         void    msgTune(void);                                              // Show 'Tune' message
+        void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
     private:
         bool 	full_second_line;                                           // Whether the second line is full with the message
 		char 	temp_units;
@@ -426,6 +427,13 @@ void DSPL::init(void) {
 	temp_units = 'C';
 }
 
+void DSPL::msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2){
+    char buff[17];
+    setCharCursor(0, 4);
+	sprintf(buff, "Cal: %3d %3d %3d", tip0, tip1, tip2);
+    print(buff);
+}
+
 void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
     char buff[10];
     char buff1[12];
@@ -437,9 +445,9 @@ void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
     setCharCursor(0, 0);
     sprintf(buff, "Set:%3d%c%c", t, DEGREE_CHAR, temp_units);
     print(buff);
-    setCharCursor(0, 2);
-	sprintf(buff1, "SetInt:%4d", tInt);
-    print(buff1);
+    //setCharCursor(0, 2);
+	//sprintf(buff1, "SetInt:%4d", tInt);
+    //print(buff1);
 }
 
 void DSPL::tCurr(uint16_t t, uint16_t tInt) {
@@ -453,9 +461,9 @@ void DSPL::tCurr(uint16_t t, uint16_t tInt) {
         return;
     }
     print(buff);
-    setCharCursor(0, 3);
-	sprintf(buff1, "CurInt:%4d", t, tInt);
-    print(buff1);
+    //setCharCursor(0, 3);
+	//sprintf(buff1, "CurInt:%4d", tInt);
+    //print(buff1);
     if (full_second_line) {
         print(F("           "));
         full_second_line = false;
@@ -1324,6 +1332,7 @@ SCREEN* calibSCREEN::menu(void) {
         uint16_t tip[3];
         buildCalibration(tip);
         pCfg->applyCalibrationData(tip);
+        pD->msgTip(tip[0],tip[1],tip[2]);
     } else {                                                                // Calibration point selected
         tune = true;
         uint16_t temp = temp_tip[mode];
@@ -1332,6 +1341,9 @@ SCREEN* calibSCREEN::menu(void) {
         pHG->setTemp(temp);
         pHG->switchPower(true);
         pD->msgON();
+        uint16_t storedCalTip[3];
+        pCfg->getCalibrationData(storedCalTip);
+        pD->msgTip(storedCalTip[0],storedCalTip[1],storedCalTip[2]);
     }
     ready = false;
     forceRedraw();
