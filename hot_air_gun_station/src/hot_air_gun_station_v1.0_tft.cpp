@@ -863,7 +863,7 @@ void HOTGUN::keepTemp(void) {
     uint16_t temp;
 
     if (isnan(c)){
-        temp = 888;
+        temp = h_temp.last();
     }
     else
     {
@@ -872,7 +872,7 @@ void HOTGUN::keepTemp(void) {
     
 
     h_temp.put(temp);
-    if (!chill && on && temp > temp_set + 20) {
+    if (!chill && on && temp > temp_set + 8) {
         digitalWrite(gun_pin, LOW);
         actual_power = 0;
         chill = true;
@@ -880,7 +880,7 @@ void HOTGUN::keepTemp(void) {
 
 	if (on) {
 		if (chill) {
-			if (temp < (temp_set - 8)) {
+			if (temp < (temp_set - 5)) {
 				chill = false;
 				resetPID();
 			} else {
