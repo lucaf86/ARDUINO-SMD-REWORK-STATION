@@ -11,8 +11,8 @@
 #include <EEPROM.h>
 #include <SPI.h>
 #include <TFT_ST7735.h> 
-#include <Adafruit_MAX31855.h>
-
+//#include <Adafruit_MAX31855.h>
+#include <MAX6675.h>
 
 
 #define SLOW_D9_PWM_FREQUENCY
@@ -44,7 +44,8 @@ const uint8_t BUZZER_PIN	= 6;                                            // Buzz
 
 #define MAXCS A3
 // Initialize the Thermocouple
-Adafruit_MAX31855 thermocouple(MAXCS);
+//Adafruit_MAX31855 thermocouple(MAXCS);
+MAX6675 thermocouple(MAXCS);
 
 uint16_t    fan_speed_raw;
 
@@ -868,9 +869,9 @@ void HOTGUN::switchPower(bool On) {
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
 
-	fan_speed_sens = analogRead(sen_pin);             						// Check the hot air fan speed
-    fan_speed_raw = fan_speed_sens;
-    double c = thermocouple.readCelsius();
+	//uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+    //double c = thermocouple.readCelsius();
+    double c = thermocouple.readTempC();
     uint16_t temp;
 
     if (isnan(c)){
@@ -1712,7 +1713,7 @@ void setup() {
     tuneScr.next    = &offScr;
 	errScr.next     = &offScr;
 
-    thermocouple.begin();
+    //thermocouple.begin();
     
     pCurrentScreen->init();
 }
