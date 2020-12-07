@@ -869,7 +869,8 @@ void HOTGUN::switchPower(bool On) {
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
 
-	//uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+    fan_speed_sens = analogRead(sen_pin);             						// Check the hot air fan speed
+    fan_speed_raw = fan_speed_sens;            						// Check the hot air fan speed
     //double c = thermocouple.readCelsius();
     double c = thermocouple.readTempC();
     uint16_t temp;
