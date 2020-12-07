@@ -33,7 +33,7 @@ const uint16_t min_working_fan = 100;                                       // M
 const uint8_t AC_SYNC_PIN   = 2;                                            // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN   = 7;                                            // Hot gun heater management pin
 const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change!
-const uint8_t TEMP_GUN_PIN	= A0;                                           // Hot gun temperature checking pin
+const uint8_t FAN_GUN_SENS_PIN	= A0;                                       // Hot gun fan checking pin
 
 const uint8_t R_MAIN_PIN	= 3;                                            // Rotary encoder main pin. Do not change!
 const uint8_t R_SECD_PIN	= 4;                                            // Rotary encoder secondary pin
@@ -46,6 +46,8 @@ const uint8_t BUZZER_PIN	= 6;                                            // Buzz
 // Initialize the Thermocouple
 Adafruit_MAX31855 thermocouple(MAXCS);
 
+uint16_t    fan_speed_raw;
+
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
  * uint32_t ID                           each time increment by 1
@@ -57,6 +59,8 @@ struct cfg {
     uint16_t    temp;                                                       // The preset temperature of the IRON in internal units
     uint8_t     fan;                                                        // The preset fan speed 0 - 255
     uint8_t     off_timeout;                                                // Automatic switch-off timeout
+    uint16_t    minFanSpeedSens;                                            // min adc value to consider fan working
+    uint16_t    maxFanSpeedSens;                                            // max adc value to consider fan working
 };
 
 class CONFIG {
@@ -252,7 +256,9 @@ void HOTGUN_CFG::init(void) {
     uint16_t    temp;                                                       // The preset temperature of the IRON in internal units
     uint8_t     fan;                                                        // The preset fan speed 0 - 255
     uint8_t     off_timeout;                                                // Automatic switch-off timeout
-
+    uint16_t    minFanSpeedSens;                                            // min adc value to consider fan working
+    uint16_t    maxFanSpeedSens;                                            // max adc value to consider fan working
+    
 bool HOTGUN_CFG::isCold(uint16_t temp) {
     return (temp < t_tip[0]) && (map(temp, ambient_temp, t_tip[0], ambient_tempC, temp_tip[0]) < 50);
 }
@@ -515,6 +521,9 @@ void DSPL::fanSpeed(uint8_t s) {
     s = map(s, 0, 255, 0, 99);
     sprintf(buff, " %c%2d%c", FAN_CHAR, s, '%');
     setCharCursor(11, 1);
+    print(buff);
+    sprintf(buff, "%4d ", fan_speed_raw);
+    setCharCursor(11, 2);
     print(buff);
 }
 
@@ -786,6 +795,7 @@ class HOTGUN : public PID {
 		uint16_t	temp_set;												// The preset temperature of the hot air gun (internal units)
 		uint16_t	temp_curr;												// The current temperature of the hot air gun
 		uint8_t		fan_speed;
+        uint16_t    fan_speed_sens;
         uint8_t     sen_pin;
 		uint8_t		gun_pin;
 		HISTORY  	h_power;                           						// The history queue of power applied values
@@ -858,7 +868,8 @@ void HOTGUN::switchPower(bool On) {
 // This routine is used to keep the hot air gun temperature near required value
 void HOTGUN::keepTemp(void) {
 
-	//uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+	fan_speed_sens = analogRead(sen_pin);             						// Check the hot air fan speed
+    fan_speed_raw = fan_speed_sens;
     double c = thermocouple.readCelsius();
     uint16_t temp;
 
@@ -1641,7 +1652,7 @@ void pidSCREEN::showCfgInfo(void) {
 }
 
 //=========================================================================================================
-HOTGUN 		hg(TEMP_GUN_PIN, HOT_GUN_PIN);
+HOTGUN 		hg(FAN_GUN_SENS_PIN, HOT_GUN_PIN);
 DSPL       	disp;
 ENCODER    	rotEncoder(R_MAIN_PIN, R_SECD_PIN);
 BUTTON     	rotButton(R_BUTN_PIN);
