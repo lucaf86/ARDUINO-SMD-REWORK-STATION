@@ -23,6 +23,7 @@ const uint8_t FONT_HEIGHT   = 8;
 const char DEGREE_CHAR      = 248; //176
 const char FAN_CHAR         = 70;//15; //70
 const char POWER_CHAR       = 80;//232; //80
+const char ARROW            = 62;
 #define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
 const uint16_t temp_minC 	= 150;
 const uint16_t temp_maxC	= 500;
@@ -226,9 +227,15 @@ class HOTGUN_CFG : public CONFIG {
         void     applyCalibrationData(uint16_t tip[3]);
         void     getCalibrationData(uint16_t tip[3]);
         void     saveCalibrationData(uint16_t tip[3]);
+        void     applyFanData(uint16_t fan_min, uint16_t fan_max);
+        void     saveFanData(uint16_t fan_min, uint16_t fan_max);
         void     setDefaults(bool Write);                                   // Set default parameter values if failed to load data from EEPROM
+        uint16_t getMinFanSpeedSens(void);
+        uint16_t getMaxFanSpeedSens(void);
     private:
         uint16_t t_tip[3];
+        uint16_t minFanSpeedSens;
+        uint16_t maxFanSpeedSens;
         const   uint16_t def_tip[3] = {200, 300, 400};//{55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
         const   uint16_t min_temp  = 150;
         const   uint16_t max_temp  = 500;//900;
@@ -236,6 +243,8 @@ class HOTGUN_CFG : public CONFIG {
         const   uint8_t  def_fan   = 64;                                  	// Default preset fan speed 0 - 255
         const   uint16_t ambient_temp = 25;//0;
         const   uint16_t ambient_tempC= 25;
+        const   uint16_t def_minFanSpeedSens = 250;
+        const   uint16_t def_maxFanSpeedSens = 1000;
 };
 
 void HOTGUN_CFG::init(void) {
@@ -251,6 +260,8 @@ void HOTGUN_CFG::init(void) {
         for (uint8_t i = 0; i < 3; ++i)
             t_tip[i] = def_tip[i];
     }
+    minFanSpeedSens = Config.minFanSpeedSens;
+    maxFanSpeedSens = Config.maxFanSpeedSens;
     return;
 }
     uint32_t    calibration;                                                // Packed calibration data by three temperature points
@@ -342,6 +353,17 @@ void HOTGUN_CFG::saveCalibrationData(uint16_t tip[3]) {
     t_tip[2] = tip[2];
 }
 
+void HOTGUN_CFG::applyFanData(uint16_t fan_min, uint16_t fan_max) {
+    minFanSpeedSens = fan_min;
+    maxFanSpeedSens = fan_max;
+}
+
+void HOTGUN_CFG::saveFanData(uint16_t fan_min, uint16_t fan_max) {
+    Config.minFanSpeedSens = fan_min;
+    Config.maxFanSpeedSens = fan_max;
+    CONFIG::save(); 
+}
+
 void HOTGUN_CFG::setDefaults(bool Write) {
     uint32_t c = def_tip[2] & 0x3FF; c <<= 10;
     c |= def_tip[1] & 0x3FF;         c <<= 10;
@@ -349,9 +371,19 @@ void HOTGUN_CFG::setDefaults(bool Write) {
     Config.calibration = c;
     Config.temp        = def_temp;
     Config.fan         = def_fan;
+    Config.minFanSpeedSens = def_minFanSpeedSens;
+    Config.maxFanSpeedSens = def_maxFanSpeedSens;
     if (Write) {
         CONFIG::save();
     }
+}
+
+uint16_t HOTGUN_CFG::getMinFanSpeedSens(void) {
+    return minFanSpeedSens;
+}
+
+uint16_t HOTGUN_CFG::getMaxFanSpeedSens(void) {
+    return maxFanSpeedSens;
 }
 
 //------------------------------------------ class BUZZER ------------------------------------------------------
@@ -395,6 +427,7 @@ class DSPL : protected TFT_ST7735 {
         void    msgFail(void);                                              // Show 'Fail' message
         void    msgTune(void);                                              // Show 'Tune' message
         void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
+        void    msgFanTune(uint8_t sel, uint16_t min, uint16_t max);
     private:
         bool 	full_second_line;                                           // Whether the second line is full with the message
 		char 	temp_units;
@@ -551,13 +584,16 @@ void DSPL::setupMode(byte mode) {
         case 1:                                                             // tune
             print(F("tune"));
             break;
-        case 2:                                                             // save
+        case 2:
+            print(F(("fan")));
+            break;
+        case 3:                                                             // save
             print(F("save"));
             break;
-        case 3:                                                             // cancel
+        case 4:                                                             // cancel
             print(F("cancel"));
             break;
-        case 4:                                                             // set defaults
+        case 5:                                                             // set defaults
             print(F("reset config"));
             break;
         default:
@@ -594,6 +630,28 @@ void DSPL::msgFail(void) {
 void DSPL::msgTune(void) {
     setCharCursor(0, 0);
     print(F("Tune"));
+}
+
+void DSPL::msgFanTune(uint8_t sel, uint16_t min, uint16_t max)  {
+    char buff[20];
+    setCharCursor(0, 0);
+    print(F("Fan Tune"));
+    if (0 == sel) {
+        setCharCursor(0, 1);
+        sprintf(buff, "%c min: %4d", ARROW, min);
+        print(buff);
+        setCharCursor(0, 2);
+        sprintf(buff, "  max: %4d", max);
+        print(buff);
+    }
+    else {
+        setCharCursor(0, 1);
+        sprintf(buff, "  min: %4d", min);
+        print(buff);
+        setCharCursor(0, 2);
+        sprintf(buff, "%c max: %4d", ARROW, max);
+        print(buff);
+    }
 }
 
 //------------------------------------------ class HISTORY ----------------------------------------------------
@@ -1208,6 +1266,7 @@ class configSCREEN : public SCREEN {
         virtual void    rotaryValue(int16_t value);
         SCREEN*         calib;                                              // Pointer to the calibration SCREEN
         SCREEN*         tune;                                               // Pointer to the tune SCREEN
+        SCREEN*         fan;                                                // Pointer to fan SCREEN
     private:
         HOTGUN*     pHG;                                                    // Pointer to the HOTGUN instance
         DSPL*       pD;                                                     // Pointer to the DSPLay instance
@@ -1220,7 +1279,7 @@ class configSCREEN : public SCREEN {
 void configSCREEN::init(void) {
     pHG->switchPower(false);
     mode = 0;
-    pEnc->reset(mode, 0, 4, 1, 0, true);
+    pEnc->reset(mode, 0, 5, 1, 0, true);
     pD->clear();
     pD->setupMode(0);
     this->scr_timeout = 30;                                                 // This variable is defined in the superclass
@@ -1241,12 +1300,15 @@ SCREEN* configSCREEN::menu(void) {
         case 1:                                                             // Tune potentiometer
             if (tune) return tune;
             break;
-        case 2:                                                             // Save configuration data
+        case 2:
+            if(fan) return fan;
+            break;
+        case 3:                                                             // Save configuration data
             menu_long();
-        case 3:                                                             // Cancel, Return to the main menu
+        case 4:                                                             // Cancel, Return to the main menu
             if (next) return next;
             break;
-        case 4:                                                             // Save defaults
+        case 5:                                                             // Save defaults
             pCfg->setDefaults(true);
             if (next) return next;
             break;
@@ -1653,6 +1715,104 @@ void pidSCREEN::showCfgInfo(void) {
 	Serial.print("]; ");
 }
 
+//---------------------------------------- class fanSCREEN [ fan threshold calibration ] -------------------------------
+class fanSCREEN : public SCREEN {
+    public:
+        fanSCREEN(HOTGUN* HG, DSPL* DSP, ENCODER* Enc, BUZZER* Buzz, HOTGUN_CFG* Cfg) {
+            pHG     = HG;
+            pD      = DSP;
+            pEnc    = Enc;
+            pCfg    = Cfg;
+            pBz     = Buzz;
+        }
+        virtual void    init(void);
+        virtual SCREEN* show(void);
+        virtual void    rotaryValue(int16_t value);
+        virtual SCREEN* menu(void);
+        virtual SCREEN* menu_long(void);
+    private:
+        HOTGUN*         pHG;                                                // Pointer to the HOTGUN instance
+        DSPL*           pD;                                                 // Pointer to the DSPLay instance
+        ENCODER*        pEnc;                                               // Pointer to the rotary encoder instance
+        HOTGUN_CFG*     pCfg;                                               // Pointer to the config instance
+        BUZZER*         pBz;                                                // Pointer to the buzzer instance
+        bool            modeSel;                                            // Which parameter to change: fan_min, fan_max
+        uint16_t        preset_temp;                                        // The preset temp in human readable units
+        bool            ready;                                              // Whether the temperature has been established
+        uint8_t         fanSet;                                             // Which parameter is modifiying
+        const uint32_t  period   = 1000;                                    // Update screen period
+        const uint16_t  temp_max = 900;
+        uint16_t        fan_min;
+        uint16_t        fan_max;
+};
+
+void fanSCREEN::init(void) {
+	fan_min = pCfg->getMinFanSpeedSens();
+	fan_max = pCfg->getMaxFanSpeedSens();
+    modeSel = true;                                     					// 0 - select the element to change [fan_min, fan_max], 1 - change the selected value
+	fanSet = 0;                                                             // 0 - fan_min, 1 - fan_max
+    pEnc->reset(0, 0, 1, 1, 1, true);             							// 0 - fan_min, 1 - fan_max
+	pHG->switchPower(false);
+    pD->clear();
+    pD->msgFanTune(fanSet,fan_min, fan_max);
+    //pD->msgOFF();
+    forceRedraw();
+}
+
+SCREEN* fanSCREEN::show(void){
+    if (millis() < update_screen) return this;
+    update_screen       = millis() + period;
+    
+ //   if (modeSel) {
+       pD->msgFanTune(fanSet,fan_min, fan_max);
+ //   }
+    return this;
+
+}
+
+SCREEN* fanSCREEN::menu(void){
+	if (modeSel) {                                                         // Prepare to select which value to adjust
+		uint16_t fanThr;
+        if (fanSet == 0) {
+            fanThr = pCfg->getMinFanSpeedSens();
+        }
+        else {
+            fanThr = pCfg->getMaxFanSpeedSens();
+        }
+		pEnc->reset(fanThr, 0, 1024, 1, 5);
+		modeSel = false;
+	} else {                                                                // Prepare to adjust the preset value
+        pEnc->reset(0, 0, 1, 1, 1, true);             							// 0 - fan_min, 1 - fan_max
+		modeSel = true;
+	}
+    return this;
+}
+
+SCREEN* fanSCREEN::menu_long(void){
+    pHG->switchPower(false);
+    pCfg->applyFanData(fan_min, fan_max);
+    pCfg->saveFanData(fan_min, fan_max);
+    if (next) return next;
+    return this;
+}
+
+void fanSCREEN::rotaryValue(int16_t value){
+    update_screen = millis() + period;
+    if (modeSel) {                                                            // select the value to be changed, fan_min, fan_max
+        fanSet = value;
+        if (fanSet > 1) fanSet = 1;
+    }
+    else {
+        if (fanSet == 0) {
+            fan_min = value;
+        }
+        else {
+            fan_max = value;
+        }
+    }
+    forceRedraw();
+}
+
 //=========================================================================================================
 HOTGUN 		hg(FAN_GUN_SENS_PIN, HOT_GUN_PIN);
 DSPL       	disp;
@@ -1669,6 +1829,7 @@ calibSCREEN  clbScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
 pidSCREEN    pidScr(&hg,  &rotEncoder);
+fanSCREEN    fanScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 
 SCREEN 	*pCurrentScreen = &offScr;
 
@@ -1710,9 +1871,11 @@ void setup() {
     cfgScr.next     = &offScr;
     cfgScr.calib    = &clbScr;
     cfgScr.tune     = &tuneScr;
+    cfgScr.fan      = &fanScr;
     clbScr.next     = &offScr;
     tuneScr.next    = &offScr;
 	errScr.next     = &offScr;
+    fanScr.next     = &offScr;
 
     //thermocouple.begin();
     
