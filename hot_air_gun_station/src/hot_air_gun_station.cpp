@@ -1,7 +1,7 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 1.1.1
- * Released Sept 10, 2020
+ * Version 1.4a
+ * Released Dec 19, 2020
  */
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -25,11 +25,11 @@ const char FAN_CHAR         = 70;//15; //70
 const char POWER_CHAR       = 80;//232; //80
 const char ARROW            = 62;
 #define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
-const uint16_t temp_minC 	= 150;
-const uint16_t temp_maxC	= 500;
+const uint16_t temp_minC    = 100;
+const uint16_t temp_maxC    = 500;
 const uint16_t temp_ambC    = 25;
-const uint16_t temp_tip[3] = {200, 300, 400};                               // Temperature reference points for calibration
-const uint16_t min_working_fan = 100;                                       // Minimal possible fan speed
+const uint16_t temp_tip[3]  = {200, 300, 400};                               // Temperature reference points for calibration
+const uint16_t min_working_fan = 114;                                       // Minimal possible fan speed
 
 const uint8_t AC_SYNC_PIN   = 2;                                            // Outlet 220 v synchronization pin. Do not change!
 const uint8_t HOT_GUN_PIN   = 7;                                            // Hot gun heater management pin
@@ -42,13 +42,14 @@ const uint8_t R_BUTN_PIN	= 5;                                            // Rota
 
 const uint8_t REED_SW_PIN   = 8;                                            // Reed switch pin
 const uint8_t BUZZER_PIN	= 6;                                            // Buzzer pin
-
+const bool    BUZZER_ACTIVE = false;                                         // Active buzzer beeps when +5v supplied to it
 #define MAXCS A3
 // Initialize the Thermocouple
 //Adafruit_MAX31855 thermocouple(MAXCS);
 MAX6675 thermocouple(MAXCS);
 
 uint16_t    fan_speed_raw;
+//volatile bool   temp_update = false;
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -218,7 +219,6 @@ class HOTGUN_CFG : public CONFIG {
     public:
         HOTGUN_CFG()                                                        { }
         void     init(void);
-        bool     isCold(uint16_t temp);                                     // Whether the HOT GUN temperature is low
         uint16_t tempPreset(void);                                          // The preset temperature in internal units
 		uint8_t	 fanPreset(void);                                           // The preset fan speed 0 - 255
         uint16_t tempInternal(uint16_t temp);                               // Translate the human readable temperature into internal value
@@ -237,12 +237,12 @@ class HOTGUN_CFG : public CONFIG {
         uint16_t minFanSpeedSens;
         uint16_t maxFanSpeedSens;
         const   uint16_t def_tip[3] = {200, 300, 400};//{55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
-        const   uint16_t min_temp  = 150;
-        const   uint16_t max_temp  = 500;//900;
-        const   uint16_t def_temp  = 190;//600;                                   // Default preset temperature
-        const   uint8_t  def_fan   = 64;                                  	// Default preset fan speed 0 - 255
-        const   uint16_t ambient_temp = 25;//0;
-        const   uint16_t ambient_tempC= 25;
+        const   uint16_t min_temp  = temp_minC;
+        const   uint16_t max_temp  = temp_maxC;
+        const   uint16_t def_temp  = 190;                                   // Default preset temperature
+        const   uint8_t  def_fan   = 225;                                  	// Default preset fan speed 0 - 255
+        const   uint16_t ambient_temp = temp_ambC;
+        const   uint16_t ambient_tempC= temp_ambC;
         const   uint16_t def_minFanSpeedSens = 250;
         const   uint16_t def_maxFanSpeedSens = 1000;
 };
@@ -270,10 +270,6 @@ void HOTGUN_CFG::init(void) {
     uint8_t     off_timeout;                                                // Automatic switch-off timeout
     uint16_t    minFanSpeedSens;                                            // min adc value to consider fan working
     uint16_t    maxFanSpeedSens;                                            // max adc value to consider fan working
-    
-bool HOTGUN_CFG::isCold(uint16_t temp) {
-    return (temp < t_tip[0]) && (map(temp, ambient_temp, t_tip[0], ambient_tempC, temp_tip[0]) < 50);
-}
 
 uint16_t HOTGUN_CFG::tempPreset(void) {
     return Config.temp;
@@ -311,10 +307,12 @@ uint16_t HOTGUN_CFG::tempHuman(uint16_t temp) {
         tempH = ambient_tempC;
     } else if (temp < t_tip[0]) {
         tempH = map(temp, ambient_temp, t_tip[0], ambient_tempC, temp_tip[0]);
-    } else if (temp >= t_tip[1]) {
+    } else if (temp <= t_tip[1]) {
+        tempH = map(temp, t_tip[0], t_tip[1], temp_tip[0], temp_tip[1]);
+    } else if (temp <= t_tip[2]) {
         tempH = map(temp, t_tip[1], t_tip[2], temp_tip[1], temp_tip[2]);
     } else {
-        tempH = map(temp, t_tip[0], t_tip[1], temp_tip[0], temp_tip[1]);
+        tempH = map(temp, t_tip[0], t_tip[2], temp_tip[0], temp_tip[2]);
     }
     return tempH;
 }
@@ -389,22 +387,83 @@ uint16_t HOTGUN_CFG::getMaxFanSpeedSens(void) {
 //------------------------------------------ class BUZZER ------------------------------------------------------
 class BUZZER {
   public:
-    BUZZER(byte buzzerP)  { buzzer_pin = buzzerP; }
+        BUZZER(byte buzzerP, bool active = true)
+                            { buzzer_pin = buzzerP; this->active = active; }
     void init(void);
-    void shortBeep(void)  { tone(buzzer_pin, 3520, 160); }
-    void lowBeep(void)    { tone(buzzer_pin,  880, 160); }
-    void doubleBeep(void) { tone(buzzer_pin, 3520, 160); delay(300); tone(buzzer_pin, 3520, 160); }
-    void failedBeep(void) { tone(buzzer_pin, 3520, 160); delay(170);
-                            tone(buzzer_pin,  880, 250); delay(260);
-                            tone(buzzer_pin, 3520, 160);
-                          }
+    void shortBeep(void);
+    void lowBeep(void);
+    void doubleBeep(void);
+    void failedBeep(void);
   private:
     byte buzzer_pin;
+        bool active;
 };
 
 void BUZZER::init(void) {
     pinMode(buzzer_pin, OUTPUT);
+    if (active) {
+        digitalWrite(buzzer_pin, LOW);
+    } else {
     noTone(buzzer_pin);
+    }
+}
+
+void BUZZER::shortBeep(void) {
+    if (active) {
+       digitalWrite(buzzer_pin, HIGH);
+       delay(80);
+       digitalWrite(buzzer_pin, LOW); 
+    } else {
+        tone(buzzer_pin, 3520, 160);
+    }
+}
+
+void BUZZER::lowBeep(void) {
+    if (active) {
+        digitalWrite(buzzer_pin, HIGH);
+        delay(160);
+        digitalWrite(buzzer_pin, LOW);
+    } else {
+        tone(buzzer_pin,  880, 160);
+    }
+}
+
+void BUZZER::doubleBeep(void) {
+    if (active) {
+        digitalWrite(buzzer_pin, HIGH);
+        delay(160);
+        digitalWrite(buzzer_pin, LOW);
+        delay(150);
+        digitalWrite(buzzer_pin, HIGH);
+        delay(160);
+        digitalWrite(buzzer_pin, LOW);
+    } else {
+        tone(buzzer_pin, 3520, 160);
+        delay(300);
+        tone(buzzer_pin, 3520, 160);
+    }
+}
+
+void BUZZER::failedBeep(void) {
+    if (active) {
+        digitalWrite(buzzer_pin, HIGH);
+        delay(170);
+        digitalWrite(buzzer_pin, LOW);
+        delay(10);
+        digitalWrite(buzzer_pin, HIGH);
+        delay(80);
+        digitalWrite(buzzer_pin, LOW);
+        delay(100);
+        digitalWrite(buzzer_pin, HIGH);
+        delay(80);
+        digitalWrite(buzzer_pin, LOW); 
+    } else {
+        tone(buzzer_pin, 3520, 160);
+        delay(170);
+        tone(buzzer_pin,  880, 250);
+        delay(260);
+        tone(buzzer_pin, 3520, 160);
+    }
 }
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
@@ -551,9 +610,9 @@ void DSPL::tReal(uint16_t t) {
 }
 
 void DSPL::fanSpeed(uint8_t s) {
-    char buff[6];
-    s = map(s, 0, 255, 0, 99);
-    sprintf(buff, " %c%2d%c", FAN_CHAR, s, '%');
+    char buff[7];
+    s = map(s, 0, 255, 0, 100);
+    sprintf(buff, " %c%3d%c", FAN_CHAR, s, '%');
     setCharCursor(11, 1);
     print(buff);
     sprintf(buff, "%4d ", fan_speed_raw);
@@ -713,6 +772,36 @@ float HISTORY::dispersion(void) {
     return d;
 }
 
+//-------------------------------------------class Exponential average ----------------------------------------
+class EMP_AVERAGE {
+    public:
+        EMP_AVERAGE(uint8_t h_length = 8)               { emp_k = h_length; emp_data = 0; }
+        void            length(uint8_t h_length)        { emp_k = h_length; emp_data = 0; }
+        void            reset(void)                     { emp_data = 0; }
+        int32_t         average(int32_t value);
+        void            update(int32_t value);
+        int32_t         read(void);
+    private:
+        volatile    uint8_t     emp_k       = 8;
+        volatile    uint32_t    emp_data    = 0;
+};
+
+int32_t EMP_AVERAGE::average(int32_t value) {
+    uint8_t round_v = emp_k >> 1;
+    update(value);
+    return (emp_data + round_v) / emp_k;
+}
+
+void EMP_AVERAGE::update(int32_t value) {
+    uint8_t round_v = emp_k >> 1;
+    emp_data += value - (emp_data + round_v) / emp_k;
+}
+
+int32_t EMP_AVERAGE::read(void) {
+    uint8_t round_v = emp_k >> 1;
+    return (emp_data + round_v) / emp_k;
+}
+
 //------------------------------------------ class PID algoritm to keep the temperature -----------------------
 /*  The PID algorithm
  *  Un = Kp*(Xs - Xn) + Ki*summ{j=0; j<=n}(Xs - Xj) + Kd(Xn - Xn-1),
@@ -807,6 +896,7 @@ class FastPWM_D9 {
         FastPWM_D9()                                { }
         void init(void);
         void duty(uint8_t d)                        { OCR1A = d; }
+        uint8_t     fanSpeed(void)                  { /*TODO: get fan speed  from sensing resistor here*/ return 255; /*analogRead(sen_pin);*/ }
 };
 
 void FastPWM_D9::init(void) {
@@ -830,46 +920,58 @@ void FastPWM_D9::init(void) {
 //--------------------- Hot air gun manager using total sine shape to power on the hardware ---------------
 class HOTGUN : public PID {
     public:
+        typedef enum { POWER_OFF, POWER_ON, POWER_FIXED, POWER_COOLING } PowerMode;
         HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin);
         void        init(void);
-		bool		isOn(void)												{ return on; }
-		void		setTemp(uint16_t t)										{ temp_set = t; /*constrain(t, 0, int_temp_max);*/ }
+		bool		isOn(void)												{ return (mode == POWER_ON || mode == POWER_FIXED);             }
+		void		setTemp(uint16_t t)										{ temp_set = constrain(t, temp_minC, temp_maxC); }
 		uint16_t	getTemp(void)											{ return temp_set; }
 		uint16_t	getCurrTemp(void)										{ return h_temp.last(); }
 		uint16_t 	tempAverage(void)                  						{ return h_temp.average(); }
         uint8_t     powerAverage(void)                                      { return h_power.average(); }
 		uint8_t     appliedPower(void)                						{ return actual_power; }
-		void		setFanSpeed(uint8_t f)									{ fan_speed = constrain(f, min_working_fan, max_fan_speed); if (on) hg_fan.duty(f); }
+		void		setFanSpeed(uint8_t f)									{ fan_speed = constrain(f, min_working_fan, max_fan_speed);   }
 		uint8_t	    getFanSpeed(void)   									{ return fan_speed; }
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
+        bool        isCold(void)                                            { return h_temp.average() < temp_gun_cold;                      }
+        bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 15;                  }
+        uint8_t     avgPowerPcnt(void);
         void        switchPower(bool On);
         void        fixPower(uint8_t Power);                                // Set the specified power to the the hot gun
 		void     	keepTemp(void);
-        bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 10; }
-        uint8_t     getMaxFixedPower(void)                                  { return period; }
+        void        readTemp(void);
+        uint8_t     getMaxFixedPower(void)                                  { return max_fix_power; }
         bool        syncCB(void);											// Return true at the end of the power period
     private:
+        bool        isGunConnected(void)                                    { return true; }
+        void        shutdown(void);
+        uint16_t    emulateTemp(void);                                      // To debug the project, simulate the Hot Air Gun heating process
         FastPWM_D9  hg_fan;
-		long     	power;                             						// The hot air gun power, calculated by the PID algorithm
 		uint16_t	temp_set;												// The preset temperature of the hot air gun (internal units)
-		uint16_t	temp_curr;												// The current temperature of the hot air gun
 		uint8_t		fan_speed;
         uint16_t    fan_speed_sens;
         uint8_t     sen_pin;
 		uint8_t		gun_pin;
 		HISTORY  	h_power;                           						// The history queue of power applied values
 		HISTORY  	h_temp;                            						// The history queue of the temperature
+        //EMP_AVERAGE e_sensor;                                               // The exponential average of sensor data
 		volatile    uint8_t     cnt;
         volatile    uint8_t     actual_power;
         volatile    bool        active;
-        bool        on, fan, fix_power;
+        uint8_t     actual_fan  = 0;                                        // Power applied to the fan (can be turned off)
+        uint8_t     fix_power   = 0;                                        // Fixed power value of the Hot Air Gun (or zero if off)
+        PowerMode   mode        = POWER_OFF;
         bool        chill;                                                  // To chill the hot gun
-        uint32_t    last_period;                                            // The time in ms when the counter reset
+        volatile    uint32_t    last_period;                                // The time in ms when the counter reset
         const       uint8_t     period          = 100;
 	   // const       uint16_t    int_temp_max    = 900;                      // The raw ADC temp value 900 corresponds to about 400°C
-	    const       uint8_t     min_fan_speed	= 30;
+        const       uint8_t     max_fix_power   = 70;
+        const       uint8_t     max_power       = 99;
+	    const       uint16_t     min_fan_speed	= 30;
         const       uint16_t    max_fan_speed   = 255;
-        const       uint16_t    temp_gun_cold   = 80;                       // The temperature of the cold iron
+        const       uint16_t    max_cool_fan    = 220;
+        const       uint16_t    temp_gun_cold   = 50;                       // The temperature of the cold iron
+        const       uint8_t     e_sensor_length = 10;                       // Exponential average length of sensor data 
 };
 
 HOTGUN::HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin) {
@@ -879,11 +981,10 @@ HOTGUN::HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin) {
 
 void HOTGUN::init(void) {
     cnt         = 0;
-    power       = 0;
+    fan_speed       = 0;
+    actual_power    = 0;
+    fix_power       = 0;
     active      = false;
-    on          = false;
-    fan         = false;
-    fix_power   = false;
     chill       = false;
     last_period = 0;
     pinMode(sen_pin, INPUT);
@@ -891,6 +992,7 @@ void HOTGUN::init(void) {
 	digitalWrite(gun_pin, LOW);
     hg_fan.init();
 	h_temp.init();
+    //e_sensor.length(e_sensor_length);
     resetPID();
 }
 
@@ -908,93 +1010,215 @@ bool HOTGUN::syncCB(void) {
             active = false;
         }
     }
+ /*   if (!active) {
+        //e_sensor.update(analogRead(sen_pin));
+		temp_update = true;
+    }*/
 	return (cnt == 0);														// End of the Power period (period AC voltage shapes)
 }
 
 void HOTGUN::switchPower(bool On) {
-	on = On;
-	if (!on) {
-		digitalWrite(gun_pin, LOW);
-        actual_power = 0;
-	} else {
-	    if (fan_speed < min_fan_speed)
-		    fan_speed = min_fan_speed;
-		hg_fan.duty(fan_speed);
-        fan = true;
-	}
+    switch (mode) {
+        case POWER_OFF:
+            if (hg_fan.fanSpeed() == 0) {                                   // Not power supplied to the Fan
+                if (On)                                                     // !FAN && On
+                    mode = POWER_ON;
+            } else {
+                if (On) {
+                    if (isGunConnected()) {                                 // FAN && On && connected
+                        mode = POWER_ON;
+	                } else {
+                        shutdown();
+                    }
+                } else {
+                    if (isGunConnected()) {                                 // FAN && !On && connected
+                        if (isCold()) {                                     // FAN && !On && connected && cold
+                            shutdown();
+                        } else {                                            // FAN && !On && connected && !cold
+                            mode = POWER_COOLING;
+                        }
+                    }
+                }
+            }
+            break;
+        case POWER_ON:
+            if (!On) {
+                mode = POWER_COOLING;
+            }
+            break;
+        case POWER_FIXED:
+            if (hg_fan.fanSpeed()) {
+                if (On) {                                                   // FAN && On
+                    mode = POWER_ON;
+                } else {                                                    // FAN && !On
+                    if (isGunConnected()) {                                 // FAN && !On && connected
+                        if (isCold()) {                                     // FAN && !On && connected && cold
+                            shutdown();
+                        } else {                                            // FAN && !On && connected && !cold
+                            mode = POWER_COOLING;
+                        }
+                    }
+                }
+            } else {                                                        // !FAN
+                if (!On) {                                                  // !FAN && !On
+                    shutdown();
+                }
+            }
+            break;
+        case POWER_COOLING:
+            if (hg_fan.fanSpeed()) {
+                if (On) {                                                   // FAN && On
+                    if (isGunConnected()) {                                 // FAN && On && connected
+                        mode = POWER_ON;
+                    } else {                                                // FAN && On && !connected
+                        shutdown();
+                    }
+                } else {                                                    // FAN && !On
+                    if (isGunConnected()) {
+                        if (isCold()) {                                     // FAN && !On && connected && cold
+                            shutdown();
+                        }
+                    } else {                                                // FAN && !On && !connected
+                        shutdown();
+                    }
+                }
+            } else {
+                if (On) {                                                   // !FAN && On
+                    mode = POWER_ON;
+                }
+            }
+    }
+    h_power.init();
 }
 
-// This routine is used to keep the hot air gun temperature near required value
-void HOTGUN::keepTemp(void) {
-
-    fan_speed_sens = analogRead(sen_pin);             						// Check the hot air fan speed
-    fan_speed_raw = fan_speed_sens;            						// Check the hot air fan speed
-    //double c = thermocouple.readCelsius();
+void HOTGUN::readTemp(void) {
     double c = thermocouple.readTempC();
     uint16_t temp;
 
     if (isnan(c)){
-        temp = h_temp.last();
+        temp = h_temp.average();
     }
     else
     {
         temp = (uint16_t)(c);
     }
-    
-
+	//e_sensor.update(temp);
     h_temp.put(temp);
-    if (!chill && on && temp > temp_set + 8) {
-        digitalWrite(gun_pin, LOW);
-        actual_power = 0;
-        chill = true;
-    }
+}
 
-	if (on) {
+// This routine is used to keep the hot air gun temperature near required value
+void HOTGUN::keepTemp(void) {
+    long p = 0;
+    readTemp();
+    fan_speed_sens = analogRead(sen_pin);             						// Check the hot air fan speed
+    fan_speed_raw = fan_speed_sens;            						// Check the hot air fan speed
+
+	//uint16_t temp = analogRead(sen_pin);             						// Check the hot air gun temperature
+    //double c = thermocouple.readCelsius();
+    //uint16_t temp = e_sensor.read();                                        // Average value of the hot air gun temperature
+    //h_temp.put(temp);
+    uint16_t temp = getCurrTemp();
+    if (!chill && (mode == POWER_ON) && (temp > (temp_set + 8))) { // Prevent global over heating
+        //digitalWrite(gun_pin, LOW);
+        p = 0;
+        chill = true;                                               // Turn off the power in main working mode only;
+    }
+    
+    switch (mode) {
+        case POWER_OFF:
+             if (!isCold()) {                                               // FAN && connected && !cold
+                        //uint16_t fan = map(temp, temp_gun_cold, temp_set, max_cool_fan, min_fan_speed);
+                        fan = constrain(/*fan*/fan_speed, min_fan_speed, max_fan_speed);
+                        hg_fan.duty(fan);
+                        mode = POWER_COOLING;
+                    }
+            break;
+        case POWER_ON:
+            hg_fan.duty(fan_speed);                                         // Turn on the fan immediately
 		if (chill) {
 			if (temp < (temp_set - 5)) {
 				chill = false;
 				resetPID();
 			} else {
-				power = 0;
-				actual_power = 0;
-                return;
+				p = 0;
+                    break;
 			}
 		}
-		power = reqPower(temp_set, temp);           						// Use PID algorithm to calculate power to be applied
-		actual_power = constrain(power, 0, period);
-		h_power.put(actual_power);
-	} else {
-        if (!fix_power) {
-		    actual_power = 0;
-		    digitalWrite(gun_pin, LOW);
-        }
-	}
-
-    // Keep fan running till the hot gun become cold
-    if (fan) {
-        if ((actual_power == 0) && temp <= temp_gun_cold) {                // Switch off the fan when the gun become cold
-            hg_fan.duty(0);
-            fan = false;
-        }
-    } else {
-        if (temp > temp_gun_cold) {
+            p = PID::reqPower(temp_set, temp);
+            p = constrain(p, 0, max_power);
+            break;
+        case POWER_FIXED:
+            p  = fix_power;
             hg_fan.duty(fan_speed);
-            fan = true;
-        }
+            break;
+        case POWER_COOLING:
+            if (hg_fan.fanSpeed() < min_fan_speed) {
+                shutdown();
+            } else {
+                if (isGunConnected()) {
+                    if (isCold()) {                                         // FAN && connected && cold
+                        shutdown();
+                    } else {                                                // FAN && connected && !cold
+                        //uint16_t fan = map(temp, temp_gun_cold, temp_set, max_cool_fan, min_fan_speed);
+                        fan = constrain(/*fan*/fan_speed, min_fan_speed, max_fan_speed);
+                        hg_fan.duty(fan);
+                    }
+                } else {                                                    // FAN && !connected
+                    shutdown();
+                }
+            }
+            break;
+        default:
+            break;
+    }
+    h_power.put(p);
+    actual_power = p;
+    if (p == 0) {
+        digitalWrite(gun_pin, LOW);
     }
 }
 
 void HOTGUN::fixPower(uint8_t Power) {
     if (Power == 0) {                                                       // To switch off the hot gun, set the Power to 0
-        fix_power = false;
-        actual_power = 0;
+        switchPower(false);
         return;
     }
 
-    if (Power > period) Power = period;
-    power = Power;
-    actual_power = power;
-    fix_power = true;
+    if (Power > max_power) Power = max_power;
+    mode = POWER_FIXED;
+    fix_power   = Power;
+}
+
+uint8_t HOTGUN::avgPowerPcnt(void) {
+    uint8_t pcnt = 0;
+    if (mode == POWER_FIXED) {
+        pcnt = map(fix_power, 0, max_fix_power, 0, 100);
+    } else {
+        pcnt = map(h_power.average(), 0, max_power, 0, 100);
+    }
+    if (pcnt > 100) pcnt = 100;
+    return pcnt;
+}
+
+void HOTGUN::shutdown(void) {
+    digitalWrite(gun_pin, LOW);
+    hg_fan.duty(0);
+    mode            = POWER_OFF;
+    actual_power    = 0;
+    active          = false;
+}
+
+uint16_t HOTGUN::emulateTemp(void) {
+    static int16_t t = 0;
+    uint8_t ap = actual_power;
+    if (mode == POWER_FIXED)
+        ap = fix_power;
+    ap = constrain(ap, 0, 100);
+    t += map(ap, 0, 100, 0, 30);
+    uint8_t fn = hg_fan.fanSpeed();
+    t -= fn/40 + t/50 + 1;
+    if (t < 0) t = 0;
+    return t;
 }
 
 //------------------------------------------ class SCREEN ------------------------------------------------------
@@ -1056,7 +1280,7 @@ void mainSCREEN::init(void) {
 	uint16_t temp_set 	= pHG->getTemp();
 	uint16_t tempH 	    = pCfg->tempHuman(temp_set);         				// The preset temperature in the human readable units
     pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
-	used = !pCfg->isCold(pHG->tempAverage());
+	used = !pHG->isCold();
 	cool_notified = !used;
 	if (used) {                                   							// the hot gun was used, we should save new data in EEPROM
 		pCfg->save(temp_set, pHG->getFanSpeed());
@@ -1092,7 +1316,7 @@ SCREEN* mainSCREEN::show(void) {
     pD->tSet(pCfg->tempHuman(temp_set),temp_set);
 	uint16_t temp  = pHG->tempAverage();
 	uint16_t tempH = pCfg->tempHuman(temp);
-	if (pCfg->isCold(temp)) {
+	if (pHG->isCold()) {
 		if (used) {
 			pD->msgCold();
 		} else {
@@ -1115,7 +1339,7 @@ SCREEN* mainSCREEN::show(void) {
 SCREEN* mainSCREEN::menu(void) {
 	if (mode_temp) {                                                        // Prepare to adjust the fan speed
 		uint8_t	fs = pHG->getFanSpeed();
-		pEnc->reset(fs, min_working_fan, 255, 5, 20);
+		pEnc->reset(fs, min_working_fan, 255, 1, 10);
 		mode_temp = false;
 	} else {                                                                // Prepare to adjust the preset temperature
 		uint16_t temp_set   = pHG->getTemp();
@@ -1161,7 +1385,7 @@ class workSCREEN : public SCREEN {
 
 void workSCREEN::init(void) {
 	uint8_t fs = pHG->getFanSpeed();
-    pEnc->reset(fs, min_working_fan, 255, 5, 20);
+    pEnc->reset(fs, min_working_fan, 255, 1, 10);
     mode_temp   = false;                                                    // By default adjust the fan speed
 	pHG->switchPower(true);
 	ready = false;
@@ -1218,7 +1442,7 @@ SCREEN* workSCREEN::show(void) {
 SCREEN* workSCREEN::menu(void) {
 	if (mode_temp) {
 		uint8_t	fs = pHG->getFanSpeed();
-		pEnc->reset(fs, min_working_fan, 255, 5, 20);
+		pEnc->reset(fs, min_working_fan, 255, 1, 10);
 		mode_temp = false;
 	} else {
 		uint16_t temp_set   = pHG->getTemp();
@@ -1820,7 +2044,7 @@ ENCODER    	rotEncoder(R_MAIN_PIN, R_SECD_PIN);
 BUTTON     	rotButton(R_BUTN_PIN);
 SWITCH      reedSwitch(REED_SW_PIN);
 HOTGUN_CFG 	hgCfg;
-BUZZER     	simpleBuzzer(BUZZER_PIN);
+BUZZER     	simpleBuzzer(BUZZER_PIN, BUZZER_ACTIVE);
 
 mainSCREEN   offScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 workSCREEN   wrkScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
@@ -1936,7 +2160,12 @@ void loop() {
 		pCurrentScreen->init();
         reset_encoder = true;
 	}
-
+/*
+    if (temp_update) {
+	    hg.readTemp();
+	    temp_update = false;
+	}
+	*/
 	if (end_of_power_period) {												// Calculate the required power
 		hg.keepTemp();
 		end_of_power_period = false;
