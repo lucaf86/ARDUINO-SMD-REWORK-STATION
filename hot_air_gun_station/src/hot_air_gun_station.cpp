@@ -78,6 +78,7 @@ class CONFIG {
             // Select appropriate record size; The record size should be power of 2, i.e. 8, 16, 32, 64, ... bytes
             for (record_size = 8; record_size < rs; record_size <<= 1);
         }
+        void clear();
         void init();
         bool load(void);
         void getConfig(struct cfg &Cfg);                                    // Copy config structure from this class
@@ -98,6 +99,14 @@ class CONFIG {
         uint32_t nextRecID;                                                 // next record ID
         uint8_t  record_size;                                               // The size of one record in bytes
 };
+
+// clear all eeprom
+void CONFIG::clear(void) {
+    for (int i = 0 ; i < EEPROM.length() ; i++) {
+    EEPROM.write(i, 0);
+  }
+  return;
+}
 
  // Read the records until the last one, point wAddr (write address) after the last record
 void CONFIG::init(void) {
@@ -218,6 +227,7 @@ bool CONFIG::readRecord(uint16_t addr, uint32_t &recID) {
 class HOTGUN_CFG : public CONFIG {
     public:
         HOTGUN_CFG()                                                        { }
+        void     clear(void);
         void     init(void);
         uint16_t tempPreset(void);                                          // The preset temperature in internal units
 		uint8_t	 fanPreset(void);                                           // The preset fan speed 0 - 255
@@ -246,6 +256,11 @@ class HOTGUN_CFG : public CONFIG {
         const   uint16_t def_minFanSpeedSens = 250;
         const   uint16_t def_maxFanSpeedSens = 1000;
 };
+
+void HOTGUN_CFG::clear(void) {
+    CONFIG::clear();
+    return;
+}
 
 void HOTGUN_CFG::init(void) {
     CONFIG::init();
@@ -2071,7 +2086,20 @@ void setup() {
 	Serial.begin(115200);
 	disp.init();
 
-	// Load configuration parameters
+    // Initialize rotary encoder
+	rotEncoder.init();
+	rotButton.init();
+	delay(100);
+    int buttonState = digitalRead(R_BUTN_PIN); // pressed = LOW, open = HIGH
+    delay(500);
+    if (buttonState == LOW) { // button pressed
+        if (digitalRead(R_BUTN_PIN) == LOW) { // still pressed
+            // eeprom clear
+            hgCfg.clear();
+        }
+    }
+    
+    // Load configuration parameters
 	hgCfg.init();
 	hg.init();
 	uint16_t temp 	= hgCfg.tempPreset();
@@ -2080,11 +2108,7 @@ void setup() {
 	hg.setFanSpeed(fan);
 
     reedSwitch.init(500, 3000);
-
-	// Initialize rotary encoder
-	rotEncoder.init();
-	rotButton.init();
-	delay(500);
+	
 	attachInterrupt(digitalPinToInterrupt(R_MAIN_PIN), rotEncChange,   CHANGE);
     attachInterrupt(digitalPinToInterrupt(AC_SYNC_PIN), syncAC, RISING);
 
