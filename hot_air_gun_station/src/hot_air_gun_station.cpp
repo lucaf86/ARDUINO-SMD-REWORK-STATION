@@ -627,7 +627,6 @@ void DSPL::tReal(uint16_t t) {
 
 void DSPL::fanSpeed(uint8_t s) {
     char buff[7];
-    s = map(s, 0, 255, 0, 100);
     sprintf(buff, " %c%3d%c", FAN_CHAR, s, '%');
     setCharCursor(11, 1);
     print(buff);
@@ -685,7 +684,6 @@ void DSPL::msgOFF(void) {
     setCharCursor(10, 0);
     print(F("   OFF"));
 }
-
 
 void DSPL::msgReady(void) {
     setCharCursor(10, 0);
@@ -948,6 +946,7 @@ class HOTGUN : public PID {
         uint8_t     appliedPower(void)                                      { return actual_power; }
         void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_fan_speed);   }
         uint8_t     getFanSpeed(void)                                       { return fan_speed; }
+        uint8_t	    presetFanPcnt(void);
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
         bool        isCold(void)                                            { return h_temp.average() < temp_gun_cold;                      }
         bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 15;                  }
@@ -1276,6 +1275,12 @@ void HOTGUN::activateRelay(bool activate) {
     }
 }
 
+uint8_t	HOTGUN::presetFanPcnt(void) {
+	uint16_t pcnt = map(fan_speed, 0, max_fan_speed, 0, 100);
+	if (pcnt > 100) pcnt = 100;
+	return pcnt;
+}
+
 //------------------------------------------ class SCREEN ------------------------------------------------------
 class SCREEN {
     public:
@@ -1353,7 +1358,7 @@ void mainSCREEN::rotaryValue(int16_t value) {
         pD->tSet(value, temp);
     } else {                                                                // set fan speed
         pHG->setFanSpeed(value);
-        pD->fanSpeed(value);
+        pD->fanSpeed(pHG->presetFanPcnt());
     }
     update_screen  = millis() + period;
 }
@@ -1387,7 +1392,7 @@ SCREEN* mainSCREEN::show(void) {
     }
     pD->tCurr(tempH,temp);
     pD->appliedPower(0, false);
-    pD->fanSpeed(pHG->getFanSpeed());
+    pD->fanSpeed(pHG->presetFanPcnt());
     return this;
 }
 
@@ -1456,7 +1461,7 @@ void workSCREEN::rotaryValue(int16_t value) {                               // S
         pD->tSet(value,temp);
     } else {
         pHG->setFanSpeed(value);
-        pD->fanSpeed(value);
+        pD->fanSpeed(pHG->presetFanPcnt());
     }
     update_screen = millis() + period;
 }
@@ -1474,7 +1479,7 @@ SCREEN* workSCREEN::show(void) {
     pD->msgON();
     uint8_t p   = pHG->appliedPower();
     pD->appliedPower(p);
-    pD->fanSpeed(pHG->getFanSpeed());
+    pD->fanSpeed(pHG->presetFanPcnt());
 
 
 //Serial.print("Diff = "); Serial.print(temp_set - temp);
@@ -1676,7 +1681,7 @@ SCREEN* calibSCREEN::show(void) {
         pD->tReal(pEnc->read());
     } else {
         if (pHG->isOn())
-            pD->fanSpeed(pHG->getFanSpeed());
+            pD->fanSpeed(pHG->presetFanPcnt());
     }
     if (tune && !pHG->isOn()) {                                             // The hot gun was switched off by error
         pD->msgOFF();
