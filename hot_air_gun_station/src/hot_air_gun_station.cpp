@@ -24,7 +24,7 @@ const char DEGREE_CHAR      = 248; //176
 const char FAN_CHAR         = 70;//15; //70
 const char POWER_CHAR       = 80;//232; //80
 const char ARROW            = 62;
-#define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y)*FONT_HEIGHT)
+#define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y+1)*FONT_HEIGHT)
 const uint16_t temp_minC    = 100;
 const uint16_t temp_maxC    = 500;
 const uint16_t temp_ambC    = 25;
@@ -38,8 +38,8 @@ const uint8_t FAN_GUN_SENS_PIN  = A0;                                       // H
 const uint8_t AC_RELAY_PIN  = A2;
 
 const uint8_t R_MAIN_PIN    = 3;                                            // Rotary encoder main pin. Do not change!
-const uint8_t R_SECD_PIN    = 4;                                            // Rotary encoder secondary pin
-const uint8_t R_BUTN_PIN    = 5;                                            // Rotary encoder button pin
+const uint8_t R_SECD_PIN    = 5;                                            // Rotary encoder secondary pin
+const uint8_t R_BUTN_PIN    = 4;                                            // Rotary encoder button pin
 
 const uint8_t REED_SW_PIN   = 8;                                            // Reed switch pin
 const uint8_t BUZZER_PIN    = 6;                                            // Buzzer pin
