@@ -1,8 +1,9 @@
 #include <Arduino.h>
-#include <Time.h>
+//#include <Time.h>
 #include <TimeLib.h>
 #include "CommonControls.h"
 
+#ifdef LCD_BL_ENABLE
 //------------------------------------------ backlight of the LCD display (lite version) ----------------------
 BL::BL(uint8_t sensorPIN, uint8_t lightPIN, uint8_t start_brightness) {
     sensor_pin          = sensorPIN;
@@ -117,8 +118,18 @@ bool BL::isDark(void) {
     light >>= 2;
     return (light < b_night);
 }
+#endif
 
 //------------------------------------------ class BUTTON ------------------------------------------------------
+void BUTTON::init(bool enablePullUp) {
+    if (enablePullUp == true) {
+      pinMode(button_pin, INPUT_PULLUP);
+    }
+    else {
+      pinMode(button_pin, INPUT);
+    } 
+}
+
 BUTTON::BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms) {
     pt = tick_time = 0;
     button_pin = ButtonPIN;
@@ -212,9 +223,17 @@ ENCODER::ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos) {
     is_looped = false;
 }
 
-void ENCODER::init(void) {
-    pinMode(m_pin, INPUT_PULLUP);
-    pinMode(s_pin, INPUT_PULLUP);
+void ENCODER::init(bool enablePullUp) {
+    if (enablePullUp == true)
+    {
+      pinMode(m_pin, INPUT_PULLUP);
+      pinMode(s_pin, INPUT_PULLUP);
+    }
+    else
+    {
+      pinMode(m_pin, INPUT);
+      pinMode(s_pin, INPUT);
+    }
 }
 
 bool ENCODER::write(int16_t initPos) {

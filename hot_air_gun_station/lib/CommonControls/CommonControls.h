@@ -46,7 +46,7 @@ class BL {
 class BUTTON {
     public:
         BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms = 3000);
-        void        init(void)                      { pinMode(button_pin, INPUT_PULLUP); }
+        void        init(bool enablePullUp = true);
         void        setTimeout(uint16_t to = 3000)  { over_press = to; }
         uint8_t     intButtonStatus(void)                     { uint8_t m = mode; mode = 0; return m; }
         void        changeINTR(void);
@@ -82,7 +82,7 @@ class SWITCH {
 class ENCODER {
     public:
         ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0);
-        void        init(void);
+        void        init(bool enablePullUp = true);
         void        set_increment(uint8_t inc)      { increment = inc; }
         uint8_t     get_increment(void)             { return increment; }
         int16_t     read(void)                      { return pos; }
