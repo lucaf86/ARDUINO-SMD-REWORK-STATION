@@ -13,37 +13,40 @@
 #include <TFT_ST7735.h>
 //#include <Adafruit_MAX31855.h>
 #include <MAX6675.h>
+//#include <digitalWriteFast.h>
 
+#define digital_write    digitalWrite
+#define pin_mode         pinMode
 
 #define SLOW_D9_PWM_FREQUENCY
-const uint8_t SCREEN_WIDTH  = ST7735_TFTWIDTH; //160;                                          //  display width, in pixels
-const uint8_t SCREEN_HEIGHT = ST7735_TFTHEIGHT; //128;                                          //  display height, in pixels
-const uint8_t FONT_WIDTH    = 8;
-const uint8_t FONT_HEIGHT   = 8;
-const char DEGREE_CHAR      = 248; //176
-const char FAN_CHAR         = 70;//15; //70
-const char POWER_CHAR       = 80;//232; //80
-const char ARROW            = 62;
+#define SCREEN_WIDTH   ST7735_TFTHEIGHT; //160;                                          //  display width, in pixels
+#define SCREEN_HEIGHT  ST7735_TFTWIDTH; //128;                                          //  display height, in pixels
+#define FONT_WIDTH     8
+#define FONT_HEIGHT    8
+#define DEGREE_CHAR      248
+#define FAN_CHAR         70
+#define POWER_CHAR       80
+#define ARROW            62
 #define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y+1)*FONT_HEIGHT)
-const uint16_t temp_minC    = 100;
-const uint16_t temp_maxC    = 500;
-const uint16_t temp_ambC    = 25;
+#define temp_minC     100
+#define temp_maxC     500
+#define temp_ambC     25
 const uint16_t temp_tip[3]  = {200, 300, 400};                               // Temperature reference points for calibration
-const uint16_t min_working_fan = 114;                                       // Minimal possible fan speed
+#define min_working_fan  114                                       // Minimal possible fan speed
 
-const uint8_t AC_SYNC_PIN   = 2;                                            // Outlet 220 v synchronization pin. Do not change!
-const uint8_t HOT_GUN_PIN   = 7;                                            // Hot gun heater management pin
-const uint8_t FAN_GUN_PIN   = 9;                                            // Hot gun fan management pin. Do not change!
-const uint8_t FAN_GUN_SENS_PIN  = A0;                                       // Hot gun fan checking pin
-const uint8_t AC_RELAY_PIN  = A2;
+#define AC_SYNC_PIN    2                                            // Outlet 220 v synchronization pin. Do not change!
+#define HOT_GUN_PIN    7                                            // Hot gun heater management pin
+#define FAN_GUN_PIN    9                                            // Hot gun fan management pin. Do not change!
+#define FAN_GUN_SENS_PIN   A0                                       // Hot gun fan checking pin
+#define AC_RELAY_PIN   A2
 
-const uint8_t R_MAIN_PIN    = 3;                                            // Rotary encoder main pin. Do not change!
-const uint8_t R_SECD_PIN    = 5;                                            // Rotary encoder secondary pin
-const uint8_t R_BUTN_PIN    = 4;                                            // Rotary encoder button pin
+#define R_MAIN_PIN     3                                            // Rotary encoder main pin. Do not change!
+#define R_SECD_PIN     5                                            // Rotary encoder secondary pin
+#define R_BUTN_PIN     4                                            // Rotary encoder button pin
 
-const uint8_t REED_SW_PIN   = 8;                                            // Reed switch pin
-const uint8_t BUZZER_PIN    = 6;                                            // Buzzer pin
-const bool    BUZZER_ACTIVE = false;                                         // Active buzzer beeps when +5v supplied to it
+#define REED_SW_PIN    8                                            // Reed switch pin
+#define BUZZER_PIN     6                                            // Buzzer pin
+#define BUZZER_ACTIVE  false                                         // Active buzzer beeps when +5v supplied to it
 #define MAXCS A3
 // Initialize the Thermocouple
 //Adafruit_MAX31855 thermocouple(MAXCS);
@@ -416,9 +419,9 @@ class BUZZER {
 };
 
 void BUZZER::init(void) {
-    pinMode(buzzer_pin, OUTPUT);
+    pin_mode(buzzer_pin, OUTPUT);
     if (active) {
-        digitalWrite(buzzer_pin, LOW);
+            digital_write(buzzer_pin, LOW);
     } else {
     noTone(buzzer_pin);
     }
@@ -426,9 +429,9 @@ void BUZZER::init(void) {
 
 void BUZZER::shortBeep(void) {
     if (active) {
-       digitalWrite(buzzer_pin, HIGH);
+       digital_write(buzzer_pin, HIGH);
        delay(80);
-       digitalWrite(buzzer_pin, LOW);
+       digital_write(buzzer_pin, LOW);
     } else {
         tone(buzzer_pin, 3520, 160);
     }
@@ -436,9 +439,9 @@ void BUZZER::shortBeep(void) {
 
 void BUZZER::lowBeep(void) {
     if (active) {
-        digitalWrite(buzzer_pin, HIGH);
+        digital_write(buzzer_pin, HIGH);
         delay(160);
-        digitalWrite(buzzer_pin, LOW);
+        digital_write(buzzer_pin, LOW);
     } else {
         tone(buzzer_pin,  880, 160);
     }
@@ -446,13 +449,13 @@ void BUZZER::lowBeep(void) {
 
 void BUZZER::doubleBeep(void) {
     if (active) {
-        digitalWrite(buzzer_pin, HIGH);
+        digital_write(buzzer_pin, HIGH);
         delay(160);
-        digitalWrite(buzzer_pin, LOW);
+        digital_write(buzzer_pin, LOW);
         delay(150);
-        digitalWrite(buzzer_pin, HIGH);
+        digital_write(buzzer_pin, HIGH);
         delay(160);
-        digitalWrite(buzzer_pin, LOW);
+        digital_write(buzzer_pin, LOW);
     } else {
         tone(buzzer_pin, 3520, 160);
         delay(300);
@@ -462,17 +465,17 @@ void BUZZER::doubleBeep(void) {
 
 void BUZZER::failedBeep(void) {
     if (active) {
-        digitalWrite(buzzer_pin, HIGH);
+        digital_write(buzzer_pin, HIGH);
         delay(170);
-        digitalWrite(buzzer_pin, LOW);
+        digital_write(buzzer_pin, LOW);
         delay(10);
-        digitalWrite(buzzer_pin, HIGH);
+        digital_write(buzzer_pin, HIGH);
         delay(80);
-        digitalWrite(buzzer_pin, LOW);
+        digital_write(buzzer_pin, LOW);
         delay(100);
-        digitalWrite(buzzer_pin, HIGH);
+        digital_write(buzzer_pin, HIGH);
         delay(80);
-        digitalWrite(buzzer_pin, LOW);
+        digital_write(buzzer_pin, LOW);
     } else {
         tone(buzzer_pin, 3520, 160);
         delay(170);
@@ -483,6 +486,13 @@ void BUZZER::failedBeep(void) {
 }
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
+const uint8_t bmDegree[5] PROGMEM = {0b00111000,
+                                    0b01000100,
+                                    0b01000100,
+                                    0b01000100,
+                                    0b00111000
+                                   };
+
 class DSPL : protected TFT_ST7735 {
     public:
         DSPL(void) : TFT_ST7735() { }
@@ -500,41 +510,14 @@ class DSPL : protected TFT_ST7735 {
         void    msgReady(void);
         void    msgCold(void);
         void    msgFail(void);                                              // Show 'Fail' message
+        void    msgAcFail(void);                                            // Show AC synch failure message
+        void    msgGunFail(void);                                           // Show Gun not detected failure message
         void    msgTune(void);                                              // Show 'Tune' message
         void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
         void    msgFanTune(uint8_t sel, uint16_t min, uint16_t max);
     private:
         bool    full_second_line;                                           // Whether the second line is full with the message
         char    temp_units;
-  /*      const   uint8_t custom_symbols[3][8] = {
-                          { 0b00110,                                        // Degree
-                            0b01001,
-                            0b01001,
-                            0b00110,
-                            0b00000,
-                            0b00000,
-                            0b00000,
-                            0b00000
-                          },
-                          { 0b00100,                                        // Fan sign
-                            0b01100,
-                            0b01100,
-                            0b00110,
-                            0b01011,
-                            0b11001,
-                            0b10000,
-                            0b00000
-                          },
-                          { 0b00011,                                        // Power sign
-                            0b00110,
-                            0b01100,
-                            0b11111,
-                            0b00110,
-                            0b01100,
-                            0b01000,
-                            0b10000
-                          }
-                        };*/
 };
 
 void DSPL::init(void) {
@@ -700,6 +683,18 @@ void DSPL::msgFail(void) {
     print(F(" -== Failed ==- "));
 }
 
+void DSPL::msgAcFail(void) {
+    msgFail();
+    setCharCursor(0, 2);
+    print(F(" -== AC ==- "));
+}
+
+void DSPL::msgGunFail(void) {
+    msgFail();
+    setCharCursor(0,2);
+    print(F("Gun not detected"));
+}
+
 void DSPL::msgTune(void) {
     setCharCursor(0, 0);
     print(F("Tune"));
@@ -786,6 +781,7 @@ float HISTORY::dispersion(void) {
     return d;
 }
 
+#ifdef EMP_AVERAGE
 //-------------------------------------------class Exponential average ----------------------------------------
 class EMP_AVERAGE {
     public:
@@ -815,6 +811,7 @@ int32_t EMP_AVERAGE::read(void) {
     uint8_t round_v = emp_k >> 1;
     return (emp_data + round_v) / emp_k;
 }
+#endif
 
 //------------------------------------------ class PID algoritm to keep the temperature -----------------------
 /*  The PID algorithm
@@ -914,8 +911,8 @@ class FastPWM_D9 {
 };
 
 void FastPWM_D9::init(void) {
-    pinMode(9, OUTPUT);
-    digitalWrite(9, LOW);
+    pin_mode(9, OUTPUT);
+    digital_write(9, LOW);
     noInterrupts();
     TCNT1   = 0;
     TCCR1B  = _BV(WGM13);                           // set mode as phase and frequency correct pwm, stop the timer
@@ -1007,10 +1004,10 @@ void HOTGUN::init(void) {
     active      = false;
     chill       = false;
     last_period = 0;
-    pinMode(sen_pin, INPUT);
-    pinMode(gun_pin, OUTPUT);
-    pinMode(relay_pin, OUTPUT);
-    digitalWrite(gun_pin, LOW);
+    pin_mode(sen_pin, INPUT);
+    pin_mode(gun_pin, OUTPUT);
+    pin_mode(relay_pin, OUTPUT);
+    digital_write(gun_pin, LOW);
     activateRelay(false);
     hg_fan.init();
     h_temp.init();
@@ -1023,12 +1020,12 @@ bool HOTGUN::syncCB(void) {
         cnt = 0;
         last_period = millis();                                             // Save the current time to check the external interrupts
         if (!active && (actual_power > 0)) {
-            digitalWrite(gun_pin, HIGH);
+            digital_write(gun_pin, HIGH);
             active = true;
         }
     } else if (cnt >= actual_power) {
         if (active) {
-            digitalWrite(gun_pin, LOW);
+            digital_write(gun_pin, LOW);
             active = false;
         }
     }
@@ -1147,7 +1144,7 @@ void HOTGUN::keepTemp(void) {
     //h_temp.put(temp);
     uint16_t temp = getCurrTemp();
     if (!chill && (mode == POWER_ON) && (temp > (temp_set + 8))) { // Prevent global over heating
-        //digitalWrite(gun_pin, LOW);
+        //digital_write(gun_pin, LOW);
         p = 0;
         chill = true;                                               // Turn off the power in main working mode only;
     }
@@ -1212,7 +1209,7 @@ void HOTGUN::keepTemp(void) {
     h_power.put(p);
     actual_power = p;
     if (p == 0) {
-        digitalWrite(gun_pin, LOW);
+        digital_write(gun_pin, LOW);
     }
 }
 
@@ -1240,7 +1237,7 @@ uint8_t HOTGUN::avgPowerPcnt(void) {
 }
 
 void HOTGUN::shutdown(void) {
-    digitalWrite(gun_pin, LOW);
+    digital_write(gun_pin, LOW);
     hg_fan.duty(0);
     mode            = POWER_OFF;
     actual_power    = 0;
@@ -1267,10 +1264,10 @@ uint16_t HOTGUN::emulateTemp(void) {
  */
 void HOTGUN::activateRelay(bool activate) {
     if (activate) {
-        digitalWrite(relay_pin, HIGH);
+        digital_write(relay_pin, HIGH);
         relay_ready_cnt = relay_activate;
     } else {
-        digitalWrite(relay_pin, LOW);
+        digital_write(relay_pin, LOW);
         relay_ready_cnt = 0;
     }
 }
@@ -1528,13 +1525,31 @@ class errorSCREEN : public SCREEN {
             pBz     = Buzz;
         }
         virtual void init(void)                                             { pHG->switchPower(false); pD->clear(); pD->msgFail(); pBz->failedBeep(); }
+       // virtual void init(uint8_t msg);
         virtual SCREEN* menu(void)                                          { if (this->next != 0)  return this->next;  else return this; }
     private:
         HOTGUN*     pHG;                                                    // Pointer to the got air gun instance
         DSPL*       pD;                                                     // Pointer to the display instance
         BUZZER*     pBz;                                                    // Pointer to the simple Buzzer instance
 };
-
+/*
+void errorSCREEN::init(uint8_t msg) {
+    pHG->switchPower(false);
+    pD->clear();
+    pBz->failedBeep();
+    switch (msg)
+    {
+      case 0:
+        pD->msgGunFail();
+        break;
+      case 1:
+        pD->msgAcFail();
+        break;
+      default:
+        break;
+    }
+}
+*/
 //---------------------------------------- class configSCREEN [configuration menu] -----------------------------
 class configSCREEN : public SCREEN {
     public:
@@ -1863,6 +1878,7 @@ SCREEN* tuneSCREEN::menu_long(void) {
     return this;
 }
 
+#ifdef PID_SCREEN
 //---------------------------------------- class pidSCREEN [tune the PID coefficients] -------------------------
 class pidSCREEN : public SCREEN {
     public:
@@ -1998,7 +2014,7 @@ void pidSCREEN::showCfgInfo(void) {
     }
     Serial.print("]; ");
 }
-
+#endif
 //---------------------------------------- class fanSCREEN [ fan threshold calibration ] -------------------------------
 class fanSCREEN : public SCREEN {
     public:
@@ -2112,7 +2128,9 @@ configSCREEN cfgScr(&hg,  &disp, &rotEncoder, &hgCfg);
 calibSCREEN  clbScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
+#ifdef PID_SCREEN
 pidSCREEN    pidScr(&hg,  &rotEncoder);
+#endif
 fanSCREEN    fanScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 
 SCREEN  *pCurrentScreen = &offScr;
@@ -2132,8 +2150,8 @@ void setup() {
     disp.init();
 
     // Initialize rotary encoder
-    rotEncoder.init();
-    rotButton.init();
+    rotEncoder.init(false);
+    rotButton.init(false);
     delay(100);
     int buttonState = digitalRead(R_BUTN_PIN); // pressed = LOW, open = HIGH
     delay(500);
@@ -2172,7 +2190,21 @@ void setup() {
 
     //thermocouple.begin();
 
-    pCurrentScreen->init();
+    // safety check: detect handle by reading reed wsitch status. When connected and put on holder must be LOW.
+    // if status is HIGH the gun can be either not connected or connected but not in the holder.
+    // Do not contiune until th e status is LOW!
+    if (reedSwitch.status() != LOW) {
+       pCurrentScreen = &errScr;
+       pCurrentScreen->init();
+       uint32_t cnt=0;
+       while(reedSwitch.status() != LOW && cnt < 10){
+           delay(100);
+           cnt = cnt + ((reedSwitch.status() == LOW) ? 1 : 0);
+       }
+    }
+    
+    pCurrentScreen = &offScr;
+    pCurrentScreen->init(); 
 }
 
 void loop() {
