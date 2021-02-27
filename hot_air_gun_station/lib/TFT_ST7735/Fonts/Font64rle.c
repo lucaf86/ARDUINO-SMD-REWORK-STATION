@@ -9,28 +9,45 @@
 
 #include <avr/pgmspace.h>
 
-
+#ifndef LOAD_FONT6_W_REDUCED_CHAR
 PROGMEM const unsigned char widtbl_f64[96] =          // character width table
 {
-        12, 12, 12, 12, 12, 12, 12, 12,     // char 32 - 39
-        12, 12, 12, 12, 12, 17, 15, 12,     // char 40 - 47
-        27, 27, 27, 27, 27, 27, 27, 27,     // char 48 - 55
-        27, 27, 15, 12, 12, 12, 12, 12,     // char 56 - 63
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 32 - 39    space
+        12, 12, 12, 12, 12, 17, 15, 12,     // char 40 - 47              - .
+        27, 27, 27, 27, 27, 27, 27, 27,     // char 48 - 55    0 1 2 3 4 5 6 7
+        27, 27, 15, 12, 12, 12, 12, 12,     // char 56 - 63    8 9 :
         12, 12, 12, 12, 12, 12, 12, 12,     // char 64 - 71
         12, 12, 12, 12, 12, 12, 12, 12,     // char 72 - 79
         12, 12, 12, 12, 12, 12, 12, 12,     // char 80 - 87
         12, 12, 12, 12, 12, 12, 12, 12,     // char 88 - 95
         12, 27, 12, 12, 12, 12, 12, 12,     // char 96 - 103
-        12, 12, 12, 12, 12, 42, 12, 12,     // char 104 - 111
-        29, 12, 12, 12, 12, 12, 12, 12,     // char 112 - 119
+        12, 12, 12, 12, 12, 42, 12, 12,     // char 104 - 111            m
+        29, 12, 12, 12, 12, 12, 12, 12,     // char 112 - 119   p
         12, 12, 12, 12, 7, 12, 12, 12      // char 120 - 127
 };
+#else
+PROGMEM const unsigned char widtbl_f64[96] =          // character width table
+{
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 32 - 39    space
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 40 - 47    
+        27, 27, 27, 27, 27, 27, 27, 27,     // char 48 - 55    0 1 2 3 4 5 6 7
+        27, 27, 12, 12, 12, 12, 12, 12,     // char 56 - 63    8 9 
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 64 - 71    
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 72 - 79    
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 80 - 87    
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 88 - 95    
+        12, 27, 12, 12, 12, 12, 12, 12,     // char 96 - 103   
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 104 - 111  
+        12, 12, 12, 12, 12, 12, 12, 12,     // char 112 - 119  
+        12, 12, 12, 12, 7, 12, 12, 12      // char 120 - 127   
+};
+#endif
 
 PROGMEM const unsigned char chr_f64_20[] = 
 {
 0x7F, 0x7F, 0x7F, 0x7F, 0x3F
 };
-
+#ifndef LOAD_FONT6_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f64_2D[] = 
 {
 0x7F, 0x7F, 0x45, 0x8A, 0x05, 0x8A, 0x05, 0x8A, 
@@ -42,6 +59,7 @@ PROGMEM const unsigned char chr_f64_2E[] =
 0x7F, 0x7F, 0x7F, 0x55, 0x84, 0x09, 0x84, 0x09, 
 0x84, 0x09, 0x84, 0x09, 0x84, 0x7F, 0x38
 };
+#endif
 
 PROGMEM const unsigned char chr_f64_30[] = 
 {
@@ -216,7 +234,7 @@ PROGMEM const unsigned char chr_f64_39[] =
 0x08, 0x90, 0x0A, 0x8E, 0x0C, 0x8B, 0x11, 0x86, 
 0x7F, 0x7F, 0x33
 };
-
+#ifndef LOAD_FONT6_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f64_3A[] = 
 {
 0x7F, 0x1A, 0x84, 0x09, 0x84, 0x09, 0x84, 0x09, 
@@ -285,6 +303,25 @@ PROGMEM const unsigned char chr_f64_70[] =
 0x18, 0x83, 0x18, 0x83, 0x18, 0x83, 0x18, 0x83, 
 0x18, 0x83, 0x18, 0x83, 0x32
 };
+
+#endif
+#ifdef LOAD_FONT6_W_REDUCED_CHAR
+PROGMEM const unsigned char* const chrtbl_f64[96] =        // character pointer table
+{
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, 
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, 
+        chr_f64_30, chr_f64_31, chr_f64_32, chr_f64_33, chr_f64_34, chr_f64_35, chr_f64_36, chr_f64_37, 
+        chr_f64_38, chr_f64_39, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, 
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, 
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
+        chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20
+};
+#else
 PROGMEM const unsigned char* const chrtbl_f64[96] =        // character pointer table
 {
         chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, 
@@ -300,3 +337,4 @@ PROGMEM const unsigned char* const chrtbl_f64[96] =        // character pointer 
         chr_f64_70, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20,
         chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20, chr_f64_20
 };
+#endif

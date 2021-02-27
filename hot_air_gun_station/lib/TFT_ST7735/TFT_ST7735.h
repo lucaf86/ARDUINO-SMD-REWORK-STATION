@@ -14,6 +14,7 @@
   their FLASH footprint.
 
  ****************************************************/
+//#define PADDING_DEBUG
 
 #define INITR_GREENTAB  0x0
 #define INITR_REDTAB    0x1
@@ -327,7 +328,7 @@ class TFT_ST7735 : public Print {
 
   uint16_t fontsLoaded(void),
            color565(uint8_t r, uint8_t g, uint8_t b);
-
+		   
   int16_t  drawChar(unsigned int uniCode, int x, int y, int font),
            drawNumber(long long_num,int poX, int poY, int font),
            drawFloat(float floatNumber,int decimal,int poX, int poY, int font),

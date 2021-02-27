@@ -6,7 +6,7 @@
 
 #include <avr/pgmspace.h>
 
-
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char widtbl_f32[96] =         // character width table
 {
         5, 8, 8, 19, 14, 21, 17, 6,       // char 32 - 39
@@ -22,7 +22,23 @@ PROGMEM const unsigned char widtbl_f32[96] =         // character width table
         15, 15, 8, 12, 7, 14, 12, 18,     // char 112 - 119
         13, 13, 12, 13, 13, 13, 15, 1       // char 120 - 127
 };
-
+#else
+PROGMEM const unsigned char widtbl_f32[96] =         // character width table
+{
+        5, 5, 5, 5, 5, 21, 5, 5,          // char 32 - 39          space     % 
+        5, 5, 5, 5, 5, 8, 7, 5,       // char 40 - 47                        - .   
+        14, 14, 14, 14, 14, 14, 14, 14,     // char 48 - 55        0 1 2 3 4 5 6 7
+        14, 14, 7, 5, 5, 9, 14, 5,       // char 56 - 63           8 9 :     = >  
+        5, 16, 17, 18, 18, 16, 15, 19,      // char 64 - 71          A B C D E F G
+        18, 6, 13, 17, 13, 21, 18, 19,      // char 72 - 79        H I J K L M N O
+        16, 19, 17, 16, 14, 18, 15, 23,     // char 80 - 87        P Q R S T U V W
+        15, 16, 16, 5, 5, 5, 5, 5,          // char 88 - 95        X Y Z          
+        5, 14, 15, 13, 15, 14, 8, 15,     // char 96 - 103           a b c d e f g
+        15, 6, 6, 12, 6, 22, 15, 15,        // char 104 - 111      h i j k l m n o
+        15, 15, 8, 12, 7, 14, 12, 18,     // char 112 - 119        p q r s t u v w
+        13, 13, 12, 5, 5, 5, 5, 5          // char 120 - 127       x y z          
+};
+#endif
 // Row format, MSB left
 
 PROGMEM const unsigned char chr_f32_20[] = 
@@ -39,6 +55,7 @@ PROGMEM const unsigned char chr_f32_21[] =
 0x3A
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_22[] = 
 {
 0x09, 0x80, 0x01, 0x80, 0x03, 0x80, 0x01, 0x80, 
@@ -69,6 +86,7 @@ PROGMEM const unsigned char chr_f32_24[] =
 0x0A, 0x81, 0x0B, 0x86, 0x02, 0x80, 0x01, 0x8B, 
 0x01, 0x81, 0x04, 0x83, 0x63
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_25[] = 
 {
@@ -86,6 +104,7 @@ PROGMEM const unsigned char chr_f32_25[] =
 0x07, 0x82, 0x07, 0x80, 0x7F, 0xC
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_26[] = 
 {
 0x15, 0x84, 0x0A, 0x86, 0x08, 0x82, 0x02, 0x82, 
@@ -147,6 +166,7 @@ PROGMEM const unsigned char chr_f32_2C[] =
 0x71, 0x82, 0x03, 0x82, 0x03, 0x82, 0x05, 0x80, 
 0x04, 0x81, 0x04, 0x80, 0x04, 0x81, 0x17
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_2D[] = 
 {
@@ -158,6 +178,7 @@ PROGMEM const unsigned char chr_f32_2E[] =
 0x71, 0x82, 0x03, 0x82, 0x03, 0x82, 0x32
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_2F[] = 
 {
 0x0D, 0x81, 0x05, 0x81, 0x05, 0x80, 0x05, 0x81, 
@@ -167,6 +188,7 @@ PROGMEM const unsigned char chr_f32_2F[] =
 0x05, 0x81, 0x05, 0x80, 0x05, 0x81, 0x05, 0x81, 
 0x2D
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_30[] = 
 {
@@ -282,12 +304,14 @@ PROGMEM const unsigned char chr_f32_3A[] =
 0x03, 0x82, 0x03, 0x82, 0x32
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_3B[] = 
 {
 0x2B, 0x82, 0x03, 0x82, 0x03, 0x82, 0x34, 0x82, 
 0x03, 0x82, 0x03, 0x82, 0x05, 0x80, 0x04, 0x81, 
 0x04, 0x80, 0x04, 0x81, 0x17
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_3C[] = 
 {
@@ -319,6 +343,7 @@ PROGMEM const unsigned char chr_f32_3F[] =
 0x5F
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_40[] = 
 {
 0x21, 0x88, 0x0D, 0x82, 0x06, 0x82, 0x09, 0x82, 
@@ -337,7 +362,7 @@ PROGMEM const unsigned char chr_f32_40[] =
 0x07, 0x81, 0x17, 0x81, 0x17, 0x81, 0x0B, 0x81, 
 0x09, 0x82, 0x05, 0x83, 0x0D, 0x87, 0x6C
 };
-
+#endif
 PROGMEM const unsigned char chr_f32_41[] = 
 {
 0x15, 0x83, 0x0B, 0x83, 0x0B, 0x83, 0x0A, 0x81, 
@@ -362,6 +387,18 @@ PROGMEM const unsigned char chr_f32_42[] =
 0x03, 0x8C, 0x03, 0x8A, 0x7A
 };
 
+#ifdef LOAD_FONT4_REWORKED_CHAR_C
+PROGMEM const unsigned char chr_f32_43[] = 
+{
+0x17, 0x86, 0x08, 0x8A, 0x05, 0x83, 0x04, 0x83, 
+0x03, 0x82, 0x08, 0x81, 0x03, 0x81, 0x0A, 0x81, 
+0x01, 0x82, 0x0A, 0x81, 0x01, 0x81, 0x0F, 0x81, 
+0x0F, 0x81, 0x0F, 0x81, 0x0F, 0x81, 0x0F, 0x81, 
+0x0B, 0x01, 0x01, 0x82, 0x0A, 0x81, 0x02, 0x81, 
+0x09, 0x82, 0x02, 0x82, 0x08, 0x81, 0x04, 0x83, 
+0x04, 0x83, 0x05, 0x8A, 0x08, 0x86, 0x7F, 0x2
+};
+#else
 PROGMEM const unsigned char chr_f32_43[] = 
 {
 0x17, 0x86, 0x08, 0x8A, 0x05, 0x83, 0x04, 0x83, 
@@ -372,6 +409,7 @@ PROGMEM const unsigned char chr_f32_43[] =
 0x09, 0x82, 0x02, 0x82, 0x08, 0x81, 0x04, 0x83, 
 0x04, 0x83, 0x05, 0x8A, 0x08, 0x86, 0x7F, 0x2
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_44[] = 
 {
@@ -656,6 +694,7 @@ PROGMEM const unsigned char chr_f32_5A[] =
 0x0C, 0x8D, 0x01, 0x8D, 0x70
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_5B[] = 
 {
 0x0B, 0x84, 0x03, 0x84, 0x03, 0x81, 0x06, 0x81, 
@@ -706,6 +745,7 @@ PROGMEM const unsigned char chr_f32_60[] =
 0x00, 0x82, 0x01, 0x82, 0x01, 0x85, 0x03, 0x83, 
 0x7F, 0x1A
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_61[] = 
 {
@@ -986,6 +1026,7 @@ PROGMEM const unsigned char chr_f32_7A[] =
 0x01, 0x89, 0x54
 };
 
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char chr_f32_7B[] = 
 {
 0x06, 0x83, 0x07, 0x82, 0x09, 0x81, 0x0A, 0x81, 
@@ -1026,11 +1067,14 @@ PROGMEM const unsigned char chr_f32_7E[] =
 0x01, 0x81, 0x00, 0x80, 0x07, 0x83, 0x7F, 0x7F, 
 0x2C
 };
+#endif
 
 PROGMEM const unsigned char chr_f32_7F[] = 
 {
 0x19
 };
+
+#ifndef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char* const chrtbl_f32[96] =       // character pointer table
 {
         chr_f32_20, chr_f32_21, chr_f32_22, chr_f32_23, chr_f32_24, chr_f32_25, chr_f32_26, chr_f32_27, 
@@ -1046,3 +1090,20 @@ PROGMEM const unsigned char* const chrtbl_f32[96] =       // character pointer t
         chr_f32_70, chr_f32_71, chr_f32_72, chr_f32_73, chr_f32_74, chr_f32_75, chr_f32_76, chr_f32_77, 
         chr_f32_78, chr_f32_79, chr_f32_7A, chr_f32_7B, chr_f32_7C, chr_f32_7D, chr_f32_7E, chr_f32_7F
 };
+#else
+PROGMEM const unsigned char* const chrtbl_f32[96] =       // character pointer table
+{
+        chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_25, chr_f32_20, chr_f32_20, // space     % 
+        chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_2D, chr_f32_2E, chr_f32_20, //           -     
+        chr_f32_30, chr_f32_31, chr_f32_32, chr_f32_33, chr_f32_34, chr_f32_35, chr_f32_36, chr_f32_37, // 0 1 2 3 4 5 6 7
+        chr_f32_38, chr_f32_39, chr_f32_3A, chr_f32_20, chr_f32_20, chr_f32_3D, chr_f32_3E, chr_f32_20, // 8 9 :     = >  
+        chr_f32_20, chr_f32_41, chr_f32_42, chr_f32_43, chr_f32_44, chr_f32_45, chr_f32_46, chr_f32_47, //   A B C D E F G
+        chr_f32_48, chr_f32_49, chr_f32_4A, chr_f32_4B, chr_f32_4C, chr_f32_4D, chr_f32_4E, chr_f32_4F, // H I J K L M N O
+        chr_f32_50, chr_f32_51, chr_f32_52, chr_f32_53, chr_f32_54, chr_f32_55, chr_f32_56, chr_f32_57, // P Q R S T U V W
+        chr_f32_58, chr_f32_59, chr_f32_5A, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, // X Y Z          
+        chr_f32_20, chr_f32_61, chr_f32_62, chr_f32_63, chr_f32_64, chr_f32_65, chr_f32_66, chr_f32_67, //   a b c d e f g
+        chr_f32_68, chr_f32_69, chr_f32_6A, chr_f32_6B, chr_f32_6C, chr_f32_6D, chr_f32_6E, chr_f32_6F, // h i j k l m n o
+        chr_f32_70, chr_f32_71, chr_f32_72, chr_f32_73, chr_f32_74, chr_f32_75, chr_f32_76, chr_f32_77, // p q r s t u v w
+        chr_f32_78, chr_f32_79, chr_f32_7A, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20, chr_f32_20  // x y z          
+};
+#endif
