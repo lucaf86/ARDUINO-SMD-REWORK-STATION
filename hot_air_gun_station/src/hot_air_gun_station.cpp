@@ -13,7 +13,6 @@
 #include <TFT_ST7735.h>
 //#include <Adafruit_MAX31855.h>
 #include <MAX6675.h>
-//#include <digitalWriteFast.h>
 
 #define digital_write    digitalWrite
 #define pin_mode         pinMode
@@ -546,7 +545,7 @@ void DSPL::msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2){
 
 void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
     char buff[10];
-    char buff1[12];
+    //char buff1[12];
     if (Celsius) {
         temp_units = 'C';
     } else {
@@ -562,7 +561,7 @@ void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
 
 void DSPL::tCurr(uint16_t t, uint16_t tInt) {
     char buff[6];
-    char buff1[12];
+    //char buff1[12];
     setCharCursor(0, 1);
     if (t < 1000) {
         sprintf(buff, "%3d%c ", t, DEGREE_CHAR);
@@ -1285,8 +1284,8 @@ class SCREEN {
         SCREEN() {
             next            = 0;
             update_screen   = 0;
-            scr_timeout     = 0;
-            time_to_return  = 0;
+            //scr_timeout     = 0;
+           // time_to_return  = 0;
         }
         virtual void    init(void)                                          { }
         virtual SCREEN* show(void)                                          { return this; }
@@ -1297,8 +1296,8 @@ class SCREEN {
         void            forceRedraw(void)                                   { update_screen = 0; }
     protected:
         uint32_t update_screen;                                             // Time in ms when the screen should be updated
-        uint32_t scr_timeout;                                               // Timeout is sec. to return to the main screen, canceling all changes
-        uint32_t time_to_return;                                            // Time in ms to return to main screen
+       // uint32_t scr_timeout;                                               // Timeout is sec. to return to the main screen, canceling all changes
+       // uint32_t time_to_return;                                            // Time in ms to return to main screen
 };
 
 //---------------------------------------- class mainSCREEN [the hot air gun is OFF] ---------------------------
@@ -1581,7 +1580,7 @@ void configSCREEN::init(void) {
     pEnc->reset(mode, 0, 5, 1, 0, true);
     pD->clear();
     pD->setupMode(0);
-    this->scr_timeout = 30;                                                 // This variable is defined in the superclass
+   // this->scr_timeout = 30;                                                 // This variable is defined in the superclass
 }
 
 SCREEN* configSCREEN::show(void) {
