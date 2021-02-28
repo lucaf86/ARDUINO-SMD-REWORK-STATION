@@ -14,24 +14,43 @@
 //#include <Adafruit_MAX31855.h>
 #include <MAX6675.h>
 
+//#define DISABLE_AC_CHECK
+//#define DISABLE_K_TH_CHECK 
+//#define PID_SCREEN
+
 #define digital_write    digitalWrite
 #define pin_mode         pinMode
 
 #define SLOW_D9_PWM_FREQUENCY
-#define SCREEN_WIDTH   ST7735_TFTHEIGHT; //160;                                          //  display width, in pixels
-#define SCREEN_HEIGHT  ST7735_TFTWIDTH; //128;                                          //  display height, in pixels
-#define FONT_WIDTH     8
-#define FONT_HEIGHT    8
+#define SCREEN_WIDTH   ST7735_TFTHEIGHT //160;                                          //  display width, in pixels
+#define SCREEN_HEIGHT  ST7735_TFTWIDTH //128;                                          //  display height, in pixels
+#define FONT_WIDTH          8 // (26)
+#define FONT_HEIGHT         8 // (26)
 #define DEGREE_CHAR      248
 #define FAN_CHAR         70
 #define POWER_CHAR       80
 #define ARROW            62
+#define LCD_BACKGROUND_COLOR TFT_BLACK // 0x5AEB // grey color code
+#define LCD_TEXT_COLOR       TFT_WHITE
+#define LCD_LINE_COLOR       TFT_LIGHTGREY
+#define LCD_DEFAULT_FONT     4
+#define LCD_SMALL_FONT       LCD_DEFAULT_FONT
+#define LCD_BIG_FONT         6
+#define LCD_BIG_FONT_MULTIPLIER 1
+#define LCD_STATUS_OFFSET    4
+#define X_PIXEL_OFFSET 10
+#define Y_PIXEL_OFFSET 8
+#define X_PIXEL(x) (X_PIXEL_OFFSET + x)
+#define Y_PIXEL(y) (Y_PIXEL_OFFSET + y)
+    
 #define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y+1)*FONT_HEIGHT)
 #define temp_minC     100
 #define temp_maxC     500
 #define temp_ambC     25
 const uint16_t temp_tip[3]  = {200, 300, 400};                               // Temperature reference points for calibration
-#define min_working_fan  114                                       // Minimal possible fan speed
+#define min_working_fan  114                                       // Minimal possible fan speed in 0-255 step
+#define max_working_fan  255
+#define max_cool_fan     240
 
 #define AC_SYNC_PIN    2                                            // Outlet 220 v synchronization pin. Do not change!
 #define HOT_GUN_PIN    7                                            // Hot gun heater management pin
@@ -53,6 +72,8 @@ MAX6675 thermocouple(MAXCS);
 
 uint16_t    fan_speed_raw;
 //volatile bool   temp_update = false;
+
+void(* resetFunc) (void) = 0; //declare arduino software reset function @ address 0
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -320,6 +341,7 @@ uint16_t HOTGUN_CFG::tempInternal(uint16_t t) {                             // T
 // Thanslate temperature from internal units to the human readable value (Celsius or Fahrenheit)
 uint16_t HOTGUN_CFG::tempHuman(uint16_t temp) {
     return temp;
+#if 0
     uint16_t tempH = 0;
     if (temp <= ambient_temp) {
         tempH = ambient_tempC;
@@ -333,6 +355,7 @@ uint16_t HOTGUN_CFG::tempHuman(uint16_t temp) {
         tempH = map(temp, t_tip[0], t_tip[2], temp_tip[0], temp_tip[2]);
     }
     return tempH;
+#endif
 }
 
 void HOTGUN_CFG::save(uint16_t temp, uint8_t fanSpeed) {
@@ -489,8 +512,79 @@ const uint8_t bmDegree[5] PROGMEM = {0b00111000,
                                     0b01000100,
                                     0b01000100,
                                     0b01000100,
-                                    0b00111000
-                                   };
+                                    0b00111000};
+ const uint8_t bmTemperature[20] PROGMEM ={
+      0b00010000,
+      0b00101000,
+      0b01101000,
+      0b00101000,
+      0b01101000,
+      0b00101000,
+      0b00101000,
+      0b00101000,
+      0b00101000,
+      0b00111000,
+      0b00111000,
+      0b00111000,
+      0b00111000,
+      0b00111000,
+      0b01111100,
+      0b11111110,
+      0b11111110,
+      0b11111110,
+      0b01111100,
+      0b00111000};
+/*static const uint8_t bmFan[4][32] PROGMEM = {
+   {0x07, 0x00, 0x07, 0x00, 0x03, 0x80, 0x03, 0x80, 0x01, 0x80, 0x01, 0x80,
+    0x01, 0x80, 0x03, 0xc0, 0x03, 0xc0, 0x0f, 0x70, 0x1c, 0x3b, 0x38, 0x1f,
+    0x38, 0x0f, 0x70, 0x00, 0x38, 0x00, 0x00, 0x00 },
+   {0x00, 0xc0, 0x00, 0xe0, 0x00, 0x70, 0x00, 0x70, 0x00, 0x60, 0x00, 0xc0,
+    0x01, 0xc0, 0x2b, 0x80, 0x7f, 0xc0, 0xf1, 0x80, 0xe0, 0xc0, 0x00, 0xe0,
+    0x00, 0x70, 0x00, 0x78, 0x00, 0x38, 0x00, 0x18 },
+   {0x00, 0x00, 0x00, 0x00, 0x00, 0x06, 0x00, 0x0e, 0x20, 0x1e, 0x78, 0x38,
+    0xfd, 0x70, 0xd7, 0xe0, 0x03, 0xc0, 0x01, 0x80, 0x01, 0x00, 0x01, 0x80,
+    0x03, 0x80, 0x03, 0x80, 0x01, 0xc0, 0x00, 0xe0 },
+   {0x00, 0x00, 0x20, 0x00, 0xf8, 0x00, 0xfc, 0x00, 0xde, 0x00, 0x06, 0x03,
+    0x03, 0x8f, 0x01, 0xff, 0x03, 0xfe, 0x03, 0x80, 0x06, 0x00, 0x0e, 0x00,
+    0x1c, 0x00, 0x3c, 0x00, 0x3e, 0x00, 0x0e, 0x00 }};*/
+#define FAN_BM_WIDTH 16
+#define FAN_BM_HEIGHT 16
+ static const uint8_t bmFan[FAN_BM_WIDTH/8 * FAN_BM_HEIGHT] PROGMEM = {
+     0b00000111, 0b11000000,
+     0b00000111, 0b11100000,
+     0b00000011, 0b11110000,
+     0b00000011, 0b11110000,
+     0b00000001, 0b11100000,
+     0b00000001, 0b11000000,
+     0b00000001, 0b11000000,
+     0b00100011, 0b11000000,
+     0b01111111, 0b11000000,
+     0b11111111, 0b11110000,
+     0b11111100, 0b11111010,
+     0b11111000, 0b11111110,
+     0b01111000, 0b01111110,
+     0b01110000, 0b01111100,
+     0b00110000, 0b00111100,
+     0b00000000, 0b00011000 };   
+
+static const uint8_t bmPower[15] PROGMEM = {
+  0b00011111,
+  0b00011111,
+  0b00111111, 
+  0b00111110, 
+  0b01111100, 
+  0b01110000, 
+  0b11111110, 
+  0b11111111, 
+  0b11111111, 
+  0b00001111, 
+  0b00011110, 
+  0b00011100,
+  0b00111000, 
+  0b00110000, 
+  0b01100000};
+
+#define DSPL_MAX_BUFF_SIZE 17
 
 class DSPL : protected TFT_ST7735 {
     public:
@@ -836,7 +930,7 @@ class PID {
         long reqPower(int temp_set, int temp_curr);
         int  changePID(uint8_t p, int k);                                   // set or get (if parameter < 0) PID parameter
     private:
-        void  debugPID(int t_set, int t_curr, long kp, long ki, long kd, long delta_p);
+        //void  debugPID(int t_set, int t_curr, long kp, long ki, long kd, long delta_p);
         int   temp_h0, temp_h1;                                             // previously measured temperature
         bool  pid_iterate;                                                  // Whether the iterative process is used
         long  i_summ;                                                       // Ki summary multiplied by denominator
@@ -907,11 +1001,13 @@ class FastPWM_D9 {
         void init(void);
         void duty(uint8_t d)                        { OCR1A = d; }
         uint8_t     fanSpeed(void)                  { /*TODO: get fan speed  from sensing resistor here*/ return 255; /*analogRead(sen_pin);*/ }
+        uint16_t    fanCurrent(void)                { return analogRead(FAN_GUN_SENS_PIN); }
 };
 
 void FastPWM_D9::init(void) {
-    pin_mode(9, OUTPUT);
-    digital_write(9, LOW);
+    pin_mode(FAN_GUN_PIN, OUTPUT);
+    pin_mode(FAN_GUN_SENS_PIN, INPUT);
+    digital_write(FAN_GUN_PIN, LOW);
     noInterrupts();
     TCNT1   = 0;
     TCCR1B  = _BV(WGM13);                           // set mode as phase and frequency correct pwm, stop the timer
@@ -938,10 +1034,13 @@ class HOTGUN : public PID {
         uint16_t    getTemp(void)                                           { return temp_set; }
         uint16_t    getCurrTemp(void)                                       { return h_temp.last(); }
         uint16_t    tempAverage(void)                                       { return h_temp.average(); }
+        void        fillTempQueue(uint16_t t)                               { h_temp.put(t); }
         uint8_t     powerAverage(void)                                      { return h_power.average(); }
         uint8_t     appliedPower(void)                                      { return actual_power; }
         void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_fan_speed);   }
         uint8_t     getFanSpeed(void)                                       { return fan_speed; }
+        void        setFanDuty(uint8_t d)                                   { hg_fan.duty(d); }
+        uint16_t    getFanCurrent(void)                                     { return hg_fan.fanCurrent(); }                                
         uint8_t	    presetFanPcnt(void);
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
         bool        isCold(void)                                            { return h_temp.average() < temp_gun_cold;                      }
@@ -981,9 +1080,9 @@ class HOTGUN : public PID {
        // const       uint16_t    int_temp_max    = 900;                      // The raw ADC temp value 900 corresponds to about 400°C
         const       uint8_t     max_fix_power   = 70;
         const       uint8_t     max_power       = 99;
-        const       uint16_t    min_fan_speed   = 30;
+        const       uint16_t    min_fan_speed   = 140;
         const       uint16_t    max_fan_speed   = 255;
-        const       uint16_t    max_cool_fan    = 220;
+     //   const       uint16_t    max_cool_fan    = 220;
         const       uint16_t    temp_gun_cold   = 50;                       // The temperature of the cold iron
         const       uint8_t     e_sensor_length = 10;                       // Exponential average length of sensor data
         const       uint32_t    relay_activate  = 1;        // The relay activation delay
@@ -1039,9 +1138,10 @@ void HOTGUN::switchPower(bool On) {
     switch (mode) {
         case POWER_OFF:
             if (hg_fan.fanSpeed() == 0) {                                   // Not power supplied to the Fan
-                if (On)                                                     // !FAN && On
+                if (On) {                                                    // !FAN && On
                     activateRelay(true);
                     mode = POWER_ON;
+                }
             } else {
                 if (On) {
                     if (isGunConnected()) {                                // FAN && On && connected
@@ -1067,9 +1167,10 @@ void HOTGUN::switchPower(bool On) {
                 activateRelay(false);
             }
             break;
-        case POWER_FIXED:
+/*        case POWER_FIXED:
             if (hg_fan.fanSpeed()) {
                 if (On) {                                                   // FAN && On
+                    activateRelay(true);
                     mode = POWER_ON;
                 } else {                                                    // FAN && !On
                     if (isGunConnected()) {                                 // FAN && !On && connected
@@ -1086,7 +1187,7 @@ void HOTGUN::switchPower(bool On) {
                     shutdown();
                 }
             }
-            break;
+            break;*/
         case POWER_COOLING:
             if (hg_fan.fanSpeed()) {
                 if (On) {                                                   // FAN && On
@@ -1134,8 +1235,8 @@ void HOTGUN::readTemp(void) {
 void HOTGUN::keepTemp(void) {
     long p = 0;
     readTemp();
-    fan_speed_sens = analogRead(sen_pin);                                   // Check the hot air fan speed
-    fan_speed_raw = fan_speed_sens;                                         // Check the hot air fan speed
+    //fan_speed_sens = analogRead(sen_pin);                                   // Check the hot air fan speed
+    //fan_speed_raw = fan_speed_sens;                                         // Check the hot air fan speed
 
     //uint16_t temp = analogRead(sen_pin);                                  // Check the hot air gun temperature
     //double c = thermocouple.readCelsius();
@@ -1176,7 +1277,7 @@ void HOTGUN::keepTemp(void) {
                 p = constrain(p, 0, max_power);
             }
             break;
-        case POWER_FIXED:
+/*        case POWER_FIXED:
             if (relay_ready_cnt > 0) {
                 --relay_ready_cnt;
             }
@@ -1184,7 +1285,7 @@ void HOTGUN::keepTemp(void) {
                 p  = fix_power;
             }
             hg_fan.duty(fan_speed);
-            break;
+            break;*/
         case POWER_COOLING:
             if (hg_fan.fanSpeed() < min_fan_speed) {
                 shutdown();
@@ -1211,7 +1312,7 @@ void HOTGUN::keepTemp(void) {
         digital_write(gun_pin, LOW);
     }
 }
-
+/*
 void HOTGUN::fixPower(uint8_t Power) {
     if (Power == 0) {                                                       // To switch off the hot gun, set the Power to 0
         switchPower(false);
@@ -1223,14 +1324,14 @@ void HOTGUN::fixPower(uint8_t Power) {
     activateRelay(true);
     fix_power   = Power;
 }
-
+*/
 uint8_t HOTGUN::avgPowerPcnt(void) {
     uint8_t pcnt = 0;
-    if (mode == POWER_FIXED) {
-        pcnt = map(fix_power, 0, max_fix_power, 0, 100);
-    } else {
+//    if (mode == POWER_FIXED) {
+//        pcnt = map(fix_power, 0, max_fix_power, 0, 100);
+//    } else {
         pcnt = map(h_power.average(), 0, max_power, 0, 100);
-    }
+//    }
     if (pcnt > 100) pcnt = 100;
     return pcnt;
 }
@@ -1247,8 +1348,8 @@ void HOTGUN::shutdown(void) {
 uint16_t HOTGUN::emulateTemp(void) {
     static int16_t t = 0;
     uint8_t ap = actual_power;
-    if (mode == POWER_FIXED)
-        ap = fix_power;
+//    if (mode == POWER_FIXED)
+//        ap = fix_power;
     ap = constrain(ap, 0, 100);
     t += map(ap, 0, 100, 0, 30);
     uint8_t fn = hg_fan.fanSpeed();
@@ -1524,7 +1625,6 @@ class errorSCREEN : public SCREEN {
             pBz     = Buzz;
         }
         virtual void init(void)                                             { pHG->switchPower(false); pD->clear(); pD->msgFail(); pBz->failedBeep(); }
-       // virtual void init(uint8_t msg);
         virtual SCREEN* menu(void)                                          { if (this->next != 0)  return this->next;  else return this; }
     private:
         HOTGUN*     pHG;                                                    // Pointer to the got air gun instance
@@ -1532,22 +1632,13 @@ class errorSCREEN : public SCREEN {
         BUZZER*     pBz;                                                    // Pointer to the simple Buzzer instance
 };
 /*
-void errorSCREEN::init(uint8_t msg) {
+void errorSCREEN::init(void) {
     pHG->switchPower(false);
     pD->clear();
+    pD->msgFail();
     pBz->failedBeep();
-    switch (msg)
-    {
-      case 0:
-        pD->msgGunFail();
-        break;
-      case 1:
-        pD->msgAcFail();
-        break;
-      default:
-        break;
-    }
 }
+
 */
 //---------------------------------------- class configSCREEN [configuration menu] -----------------------------
 class configSCREEN : public SCREEN {
@@ -1819,7 +1910,7 @@ class tuneSCREEN : public SCREEN {
 };
 
 void tuneSCREEN::init(void) {
-    pHG->switchPower(false);
+/*    pHG->switchPower(false);
     max_power = pHG->getMaxFixedPower();
     pEnc->reset(max_power >> 2, 0, max_power, 1, 2);                        // Rotate the encoder to change the power supplied
     on = false;
@@ -1827,19 +1918,19 @@ void tuneSCREEN::init(void) {
     pD->clear();
     pD->msgTune();
     pD->msgOFF();
-    forceRedraw();
+    forceRedraw();*/
 }
 
 void tuneSCREEN::rotaryValue(int16_t value) {
-    if (on) {
+ /*   if (on) {
         heat_ms = millis();
         pHG->fixPower(value);
     }
-    forceRedraw();
+    forceRedraw();*/
 }
 
 SCREEN* tuneSCREEN::show(void) {
-    if (millis() < update_screen) return this;
+ /*   if (millis() < update_screen) return this;
     update_screen = millis() + period;
     uint16_t temp   = pHG->getCurrTemp();
     uint8_t  power  = pHG->appliedPower();
@@ -1852,11 +1943,11 @@ SCREEN* tuneSCREEN::show(void) {
         pBz->shortBeep();
         heat_ms = 0;
     }
-    return this;
+    return this;*/
 }
 
 SCREEN* tuneSCREEN::menu(void) {                                            // The rotary button pressed
-    if (on) {
+  /*  if (on) {
         pHG->fixPower(0);
         on = false;
         pD->msgOFF();
@@ -1867,14 +1958,14 @@ SCREEN* tuneSCREEN::menu(void) {                                            // T
         pHG->fixPower(power);
         pD->msgON();
     }
-    return this;
+    return this;*/
 }
 
 SCREEN* tuneSCREEN::menu_long(void) {
-    pHG->fixPower(0);                                                       // switch off the power
+ /*   pHG->fixPower(0);                                                       // switch off the power
     pHG->switchPower(false);
     if (next) return next;
-    return this;
+    return this;*/
 }
 
 #ifdef PID_SCREEN
@@ -1905,7 +1996,7 @@ void pidSCREEN::init(void) {
     mode = 0;                                                               // select the element from the list
     pEnc->reset(1, 1, 5, 1, 1, true);                                       // 1 - Kp, 2 - Ki, 3 - Kd, 4 - temp, 5 - fan
     showCfgInfo();
-    Serial.println("");
+    //Serial.println("");
 }
 
 void pidSCREEN::rotaryValue(int16_t value) {
@@ -1913,48 +2004,48 @@ void pidSCREEN::rotaryValue(int16_t value) {
         showCfgInfo();
         switch (value) {
             case 1:
-                Serial.println("Kp");
+                //Serial.println("Kp");
                 break;
             case 2:
-                Serial.println("Ki");
+                //Serial.println("Ki");
                 break;
             case 4:
-                Serial.println(F("Temp"));
+                //Serial.println(F("Temp"));
                 break;
             case 5:
-                Serial.println(F("Fan"));
+                //Serial.println(F("Fan"));
                 break;
             case 3:
             default:
-                Serial.println("Kd");
+                //Serial.println("Kd");
             break;
         }
     } else {
         switch (mode) {
             case 1:
-                Serial.print(F("Kp = "));
+                //Serial.print(F("Kp = "));
                 pHG->changePID(mode, value);
                 break;
             case 2:
-                Serial.print(F("Ki = "));
+                //Serial.print(F("Ki = "));
                 pHG->changePID(mode, value);
                 break;
             case 4:
-                Serial.print(F("Temp = "));
+               // Serial.print(F("Temp = "));
                 temp_set = value;
                 pHG->setTemp(value);
                 break;
             case 5:
-                Serial.print(F("Fan Speed = "));
+                //Serial.print(F("Fan Speed = "));
                 pHG->setFanSpeed(value);
                 break;
             case 3:
             default:
-                Serial.print(F("Kd = "));
+                //Serial.print(F("Kd = "));
                 pHG->changePID(mode, value);
                 break;
         }
-        Serial.println(value);
+        //Serial.println(value);
     }
 }
 
@@ -1968,7 +2059,7 @@ SCREEN* pidSCREEN::show(void) {
         uint8_t  fs     = pHG->getFanSpeed();
         fs = map(fs, 0, 255, 0, 100);
         sprintf(buff, "%3d: power = %3d%c, fan = %3d;", temp_set - temp, pwr, '%', fs);
-        Serial.println(buff);
+        //Serial.println(buff);
     }
     return this;
 }
@@ -1993,15 +2084,16 @@ SCREEN* pidSCREEN::menu(void) {                                             // T
 SCREEN* pidSCREEN::menu_long(void) {
     bool on = pHG->isOn();
     pHG->switchPower(!on);
-    if (on)
-        Serial.println(F("The air gun is OFF"));
-    else
-        Serial.println(F("The air gun is ON"));
+    if (on) {
+        //Serial.println(F("The air gun is OFF"));
+    } else {
+        //Serial.println(F("The air gun is ON"));
+    }
   return this;
 }
 
 void pidSCREEN::showCfgInfo(void) {
-    Serial.print(F("Temp set: "));
+/*    Serial.print(F("Temp set: "));
     Serial.print(temp_set, DEC);
     Serial.print(F(", fan speed = "));
     Serial.print(pHG->getFanSpeed());
@@ -2011,7 +2103,7 @@ void pidSCREEN::showCfgInfo(void) {
         Serial.print(k, DEC);
         if (i < 3) Serial.print(", ");
     }
-    Serial.print("]; ");
+    Serial.print("]; ");*/
 }
 #endif
 //---------------------------------------- class fanSCREEN [ fan threshold calibration ] -------------------------------
@@ -2048,7 +2140,7 @@ class fanSCREEN : public SCREEN {
 void fanSCREEN::init(void) {
     fan_min = pCfg->getMinFanSpeedSens();
     fan_max = pCfg->getMaxFanSpeedSens();
-    modeSel = true;                                                         // 0 - select the element to change [fan_min, fan_max], 1 - change the selected value
+    modeSel = true;                                                         // TRUE - select the element to change [fan_min, fan_max],  FALSE - change the selected value
     fanSet = 0;                                                             // 0 - fan_min, 1 - fan_max
     pEnc->reset(0, 0, 1, 1, 1, true);                                       // 0 - fan_min, 1 - fan_max
     pHG->switchPower(false);
@@ -2125,7 +2217,7 @@ mainSCREEN   offScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 workSCREEN   wrkScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 configSCREEN cfgScr(&hg,  &disp, &rotEncoder, &hgCfg);
 calibSCREEN  clbScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
-tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
+//tuneSCREEN   tuneScr(&hg, &disp, &rotEncoder, &simpleBuzzer);
 errorSCREEN  errScr(&hg,  &disp, &simpleBuzzer);
 #ifdef PID_SCREEN
 pidSCREEN    pidScr(&hg,  &rotEncoder);
@@ -2145,7 +2237,9 @@ void rotEncChange(void) {
 }
 
 void setup() {
-    Serial.begin(115200);
+    uint16_t fan_current_min, fan_current_max;
+    boolean cfgLoad;
+
     disp.init();
 
     // Initialize rotary encoder
@@ -2180,27 +2274,62 @@ void setup() {
     wrkScr.next     = &offScr;
     cfgScr.next     = &offScr;
     cfgScr.calib    = &clbScr;
-    cfgScr.tune     = &tuneScr;
+#ifdef PID_SCREEN
+    cfgScr.tune     = &pidScr;//tuneScr;
+#else
+    cfgScr.tune     = &cfgScr;
+#endif
     cfgScr.fan      = &fanScr;
     clbScr.next     = &offScr;
-    tuneScr.next    = &offScr;
+#ifdef PID_SCREEN
+    /*tuneScr*/pidScr.next    = &offScr;
+#endif
     errScr.next     = &offScr;
     fanScr.next     = &offScr;
 
     //thermocouple.begin();
 
-    // safety check: detect handle by reading reed wsitch status. When connected and put on holder must be LOW.
-    // if status is HIGH the gun can be either not connected or connected but not in the holder.
+    pCurrentScreen = &errScr;
+    
+    // safety check: detect gun by reading reed wsitch status. When connected and in the cradle it must be LOW.
+    // If status is HIGH the gun can be either not connected or connected but not in the cradle.
     // Do not contiune until th e status is LOW!
     if (reedSwitch.status() != LOW) {
-       pCurrentScreen = &errScr;
+    //while(reedSwitch.status() != LOW){
+       //pCurrentScreen = &errScr;
        pCurrentScreen->init();
-       uint32_t cnt=0;
-       while(reedSwitch.status() != LOW && cnt < 10){
-           delay(100);
-           cnt = cnt + ((reedSwitch.status() == LOW) ? 1 : 0);
+       //delay(1000);
+       //uint32_t cnt=0;
+       while(reedSwitch.status() != LOW /*&& cnt < 10*/){
+           delay(50);
+           //cnt = cnt + ((reedSwitch.status() == LOW) ? 1 : 0);
        }
+       }
+
+#ifndef DISABLE_K_TH_CHECK    
+    // K-type Thermocouple safety check
+    uint8_t queueId;
+    for(queueId=0; queueId<(H_LENGTH-1); queueId++) { // leave last idx free for next read
+        double readTemp = thermocouple.readTempC();
+        if(MAX6675_THERMOCOUPLE_OPEN == readTemp || readTemp < 0) {
+           pCurrentScreen->init();
+           while(1)
+               delay(500);
+        }
+        else {
+           hg.fillTempQueue((uint16_t)readTemp);
+        }
     }
+#endif
+    
+    //fan safety check
+    hg.setFanDuty(max_working_fan);
+    delay(3000);
+    fan_current_max = analogRead(FAN_GUN_SENS_PIN);
+    hg.setFanDuty(min_working_fan);
+    delay(3000);
+    fan_current_min = analogRead(FAN_GUN_SENS_PIN);
+    hg.setFanDuty(0);
     
     pCurrentScreen = &offScr;
     pCurrentScreen->init(); 
@@ -2271,7 +2400,7 @@ void loop() {
         end_of_power_period = false;
     }
 
-    if (millis() > ac_check) {
+        if (millis() > ac_check) {
         ac_check = millis() + 1000;
 #ifndef DISABLE_AC_CHECK
         if (!hg.areExternalInterrupts()) {
