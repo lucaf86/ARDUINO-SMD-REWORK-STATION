@@ -24,8 +24,10 @@
 #define SLOW_D9_PWM_FREQUENCY
 #define SCREEN_WIDTH   ST7735_TFTHEIGHT //160;                                          //  display width, in pixels
 #define SCREEN_HEIGHT  ST7735_TFTWIDTH //128;                                          //  display height, in pixels
-#define FONT_WIDTH          8 // (26)
-#define FONT_HEIGHT         8 // (26)
+#define _FONT_WIDTH          12 
+#define FONT_WIDTH (26)
+#define _FONT_HEIGHT         16 // (26)
+#define FONT_HEIGHT        (26)
 #define DEGREE_CHAR      248
 #define FAN_CHAR         70
 #define POWER_CHAR       80
@@ -33,9 +35,9 @@
 #define LCD_BACKGROUND_COLOR TFT_BLACK // 0x5AEB // grey color code
 #define LCD_TEXT_COLOR       TFT_WHITE
 #define LCD_LINE_COLOR       TFT_LIGHTGREY
-#define LCD_DEFAULT_FONT     4
+#define LCD_DEFAULT_FONT     2//4
 #define LCD_SMALL_FONT       LCD_DEFAULT_FONT
-#define LCD_BIG_FONT         6
+#define LCD_BIG_FONT         2//6
 #define LCD_BIG_FONT_MULTIPLIER 1
 #define LCD_STATUS_OFFSET    4
 #define X_PIXEL_OFFSET 10
@@ -43,7 +45,7 @@
 #define X_PIXEL(x) (X_PIXEL_OFFSET + x)
 #define Y_PIXEL(y) (Y_PIXEL_OFFSET + y)
     
-#define setCharCursor(x, y) setCursor((x)*FONT_WIDTH, (y+1)*FONT_HEIGHT)
+#define setCharCursor(x, y) setCursor((x)*_FONT_WIDTH, (y+1)*_FONT_HEIGHT)
 #define temp_minC     100
 #define temp_maxC     500
 #define temp_ambC     25
@@ -74,6 +76,20 @@ uint16_t    fan_speed_raw;
 //volatile bool   temp_update = false;
 
 void(* resetFunc) (void) = 0; //declare arduino software reset function @ address 0
+
+#define TFT_print(stringBuff, xPos, yPos, font)   TFT_ST7735::drawString(stringBuff, (xPos)*_FONT_WIDTH, (yPos+1)*_FONT_HEIGHT, font)
+
+/*
+#define TFT_print(stringBuf, xPos, yPos, font)     TFT_ST7735::setTextFont(font); \
+                                                 TFT_ST7735::setCursor(xPos, yPos); \
+                                                   print(stringBuf);
+*/
+/*
+inline void TFT_print(char *stringBuf, uint8_t xPos, uint8_t yPos, uint8_t font) {
+    TFT_ST7735::setTextFont(font);
+    TFT_ST7735::setCursor(xPos, yPos)
+    print(buff);
+}   */
 
 //------------------------------------------ Configuration data ------------------------------------------------
 /* Config record in the EEPROM has the following format:
@@ -252,7 +268,7 @@ class HOTGUN_CFG : public CONFIG {
     public:
         HOTGUN_CFG()                                                        { }
         void     clear(void);
-        void     init(void);
+        bool     init(void);
         uint16_t tempPreset(void);                                          // The preset temperature in internal units
         uint8_t  fanPreset(void);                                           // The preset fan speed 0 - 255
         uint16_t tempInternal(uint16_t temp);                               // Translate the human readable temperature into internal value
@@ -286,9 +302,11 @@ void HOTGUN_CFG::clear(void) {
     return;
 }
 
-void HOTGUN_CFG::init(void) {
+bool HOTGUN_CFG::init(void) {
+    bool cfgLoad; 
     CONFIG::init();
-    if (!CONFIG::load()) setDefaults(false);                                // If failed to load the data from EEPROM, initialize the config data with the default values
+    cfgLoad = CONFIG::load();
+    if (!cfgLoad) setDefaults(false);                                // If failed to load the data from EEPROM, initialize the config data with the default values
     uint32_t   cd = Config.calibration;
     t_tip[0] = cd & 0x3FF; cd >>= 10;                                       // 10 bits per calibration parameter, because the ADC readings are 10 bits
     t_tip[1] = cd & 0x3FF; cd >>= 10;
@@ -301,7 +319,7 @@ void HOTGUN_CFG::init(void) {
     }
     minFanSpeedSens = Config.minFanSpeedSens;
     maxFanSpeedSens = Config.maxFanSpeedSens;
-    return;
+    return cfgLoad;
 }
     uint32_t    calibration;                                                // Packed calibration data by three temperature points
     uint16_t    temp;                                                       // The preset temperature of the IRON in internal units
@@ -584,7 +602,7 @@ static const uint8_t bmPower[15] PROGMEM = {
   0b00110000, 
   0b01100000};
 
-#define DSPL_MAX_BUFF_SIZE 17
+#define DSPL_MAX_BUFF_SIZE 20
 
 class DSPL : protected TFT_ST7735 {
     public:
@@ -611,6 +629,8 @@ class DSPL : protected TFT_ST7735 {
     private:
         bool    full_second_line;                                           // Whether the second line is full with the message
         char    temp_units;
+        char    buff[DSPL_MAX_BUFF_SIZE+1];
+        char    buff1[DSPL_MAX_BUFF_SIZE+1];
 };
 
 void DSPL::init(void) {
@@ -631,14 +651,15 @@ void DSPL::init(void) {
 }
 
 void DSPL::msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2){
-    char buff[17];
+    //char buff[17];
     setCharCursor(0, 4);
     sprintf(buff, "Cal: %3d %3d %3d", tip0, tip1, tip2);
-    print(buff);
+    //print(buff);
+    TFT_print(buff, 0, 4, LCD_DEFAULT_FONT);
 }
 
 void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
-    char buff[10];
+   // char buff[10];
     //char buff1[12];
     if (Celsius) {
         temp_units = 'C';
@@ -647,171 +668,197 @@ void DSPL::tSet(uint16_t t, uint16_t tInt, bool Celsius) {
     }
     setCharCursor(0, 0);
     sprintf(buff, "Set:%3d%c%c", t, DEGREE_CHAR, temp_units);
-    print(buff);
+    //print(buff);
+    TFT_print(buff, 0, 0, LCD_DEFAULT_FONT);
     //setCharCursor(0, 2);
     //sprintf(buff1, "SetInt:%4d", tInt);
     //print(buff1);
 }
 
 void DSPL::tCurr(uint16_t t, uint16_t tInt) {
-    char buff[6];
+   // char buff[6];
     //char buff1[12];
     setCharCursor(0, 1);
     if (t < 1000) {
         sprintf(buff, "%3d%c ", t, DEGREE_CHAR);
     } else {
-        print(F("xxx"));
+        //print(F("xxx"));
+        TFT_print("xxx", 0, 1, LCD_DEFAULT_FONT);
         return;
     }
-    print(buff);
+    //print(buff);
+    TFT_print(buff, 0, 1, LCD_DEFAULT_FONT);
     //setCharCursor(0, 3);
     //sprintf(buff1, "CurInt:%4d", tInt);
     //print(buff1);
-    if (full_second_line) {
-        print(F("           "));
-        full_second_line = false;
-    }
 }
 
 void DSPL::tInternal(uint16_t t) {
-    char buff[6];
+    //char buff[6];
     setCharCursor(0, 1);
     if (t < 1023) {
         sprintf(buff, "%4d ", t);
     } else {
-        print(F("xxxx"));
+        //print(F("xxxx"));
+        TFT_print("xxxx", 0, 1, LCD_DEFAULT_FONT);
         return;
     }
-    print(buff);
-    if (full_second_line) {
-        print(F("           "));
-        full_second_line = false;
-    }
+    //print(buff);
+    TFT_print(buff, 0, 1, LCD_DEFAULT_FONT);
 }
 
 void DSPL::tReal(uint16_t t) {
-    char buff[6];
+    //char buff[6];
     setCharCursor(11, 1);
     if (t < 1000) {
         sprintf(buff, ">%3d%c", t, DEGREE_CHAR);
     } else {
-        print(F("xxx"));
+        //print(F("xxx"));
+        TFT_print("xxx", 11, 1, LCD_DEFAULT_FONT);
         return;
     }
-    print(buff);
+    //print(buff);
+    TFT_print(buff, 11, 1, LCD_DEFAULT_FONT);
 }
 
 void DSPL::fanSpeed(uint8_t s) {
-    char buff[7];
+   // char buff[7];
     sprintf(buff, " %c%3d%c", FAN_CHAR, s, '%');
-    setCharCursor(11, 1);
-    print(buff);
-    sprintf(buff, "%4d ", fan_speed_raw);
-    setCharCursor(11, 2);
-    print(buff);
+    setCharCursor(0, 4);
+    //print(buff);
+    TFT_print(buff, 0, 4, LCD_DEFAULT_FONT);
+    sprintf(buff1, "%4d ", fan_speed_raw);
+    setCharCursor(11, 5);
+    //print(buff);
+    TFT_print(buff1, 0, 5, LCD_DEFAULT_FONT);
 }
 
 void DSPL::appliedPower(uint8_t p, bool show_zero) {
-    char buff[6];
+   // char buff[6];
     if (p > 99) p = 99;
     setCharCursor(5, 1);
     if (p == 0 && !show_zero) {
-        print(F("     "));
+        //print(F("     "));
+        TFT_print("     ", 5, 1, LCD_DEFAULT_FONT);
     } else {
         sprintf(buff, " %c%2d%c", POWER_CHAR, p, '%');
-        print(buff);
+        //print(buff);
+        TFT_print(buff, 5, 1, LCD_DEFAULT_FONT);
     }
 }
-
+const char menu[6][10] = {"calibrate", "   tune", "   fan", "   save", "  cancel", "reset cfg"};
+#define LCD_MENU_FONT    4
 void DSPL::setupMode(byte mode) {
     clear();
-    print(F("Setup"));
-    setCharCursor(1,1);
+    //print(F("Setup"));
+    TFT_print(menu[mode], 0, 0, LCD_DEFAULT_FONT);
+ #if 0
+   setCharCursor(1,1);
     switch (mode) {
         case 0:                                                             // tip calibrate
-            print(F("calibrate"));
+            //print(F("calibrate"));
+            TFT_print("calibrate", 1, 1, LCD_DEFAULT_FONT);
             break;
         case 1:                                                             // tune
-            print(F("tune"));
+            //print(F("tune"));
+            TFT_print("tune", 1, 1, LCD_DEFAULT_FONT);
             break;
         case 2:
-            print(F(("fan")));
+            //print(F(("fan")));
+            TFT_print("fan", 1, 1, LCD_DEFAULT_FONT);
             break;
         case 3:                                                             // save
-            print(F("save"));
+            //print(F("save"));
+            TFT_print("save", 1, 1, LCD_DEFAULT_FONT);
             break;
         case 4:                                                             // cancel
-            print(F("cancel"));
+            //print(F("cancel"));
+            TFT_print("cancel", 1, 1, LCD_DEFAULT_FONT);
             break;
         case 5:                                                             // set defaults
-            print(F("reset config"));
+            //print(F("reset config"));
+            TFT_print("reset config", 1, 1, LCD_DEFAULT_FONT);
             break;
         default:
             break;
     }
+#endif
 }
 
 void DSPL::msgON(void) {
-    setCharCursor(10, 0);
-    print(F("    ON"));
+    setCharCursor(8, 0);
+    //print(F("    ON"));
+    TFT_print("    ON", 10, 0, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgOFF(void) {
-    setCharCursor(10, 0);
-    print(F("   OFF"));
+    setCharCursor(8, 0);
+    //print(F("   OFF"));
+    TFT_print("   OFF", 10, 0, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgReady(void) {
-    setCharCursor(10, 0);
-    print(F(" Ready"));
+    setCharCursor(8, 0);
+   // print(F(" Ready"));
+    TFT_print(" Ready", 10, 0, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgCold(void) {
-    setCharCursor(10, 0);
-    print(F("  Cold"));
+    setCharCursor(8, 0);
+    //print(F("  Cold"));
+    TFT_print("  Cold", 10, 0, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgFail(void) {
     setCharCursor(0, 1);
-    print(F(" -== Failed ==- "));
+    //print(F(" -== Failed ==- "));
+    TFT_print(" -== Failed ==- ", 0, 1, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgAcFail(void) {
     msgFail();
     setCharCursor(0, 2);
-    print(F(" -== AC ==- "));
+   // print(F(" -== AC ==- "));
+    TFT_print(" -== AC ==- ", 0, 2, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgGunFail(void) {
     msgFail();
     setCharCursor(0,2);
-    print(F("Gun not detected"));
+   // print(F("Gun not detected"));
+    TFT_print("Gun not detected", 0, 2, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgTune(void) {
     setCharCursor(0, 0);
-    print(F("Tune"));
+   // print(F("Tune"));
+    TFT_print("Tune", 0, 0, LCD_DEFAULT_FONT);
 }
 
 void DSPL::msgFanTune(uint8_t sel, uint16_t min, uint16_t max)  {
-    char buff[20];
+    //char buff[20];
     setCharCursor(0, 0);
-    print(F("Fan Tune"));
+   // print(F("Fan Tune"));
+    TFT_print("Fan Tune", 0, 0, LCD_DEFAULT_FONT);
     if (0 == sel) {
         setCharCursor(0, 1);
         sprintf(buff, "%c min: %4d", ARROW, min);
-        print(buff);
+        //print(buff);
+        TFT_print(buff, 0, 1, LCD_DEFAULT_FONT);
         setCharCursor(0, 2);
         sprintf(buff, "  max: %4d", max);
-        print(buff);
+        TFT_print(buff, 0, 2, LCD_DEFAULT_FONT);
+        //print(buff);
     }
     else {
         setCharCursor(0, 1);
         sprintf(buff, "  min: %4d", min);
-        print(buff);
+        //print(buff);
+        TFT_print(buff, 0, 1, LCD_DEFAULT_FONT);
         setCharCursor(0, 2);
         sprintf(buff, "%c max: %4d", ARROW, max);
-        print(buff);
+       // print(buff);
+        TFT_print(buff, 0, 2, LCD_DEFAULT_FONT);
     }
 }
 
@@ -1026,10 +1073,10 @@ void FastPWM_D9::init(void) {
 //--------------------- Hot air gun manager using total sine shape to power on the hardware ---------------
 class HOTGUN : public PID {
     public:
-        typedef enum { POWER_OFF, POWER_ON, POWER_FIXED, POWER_COOLING } PowerMode;
+        typedef enum { POWER_OFF, POWER_ON, POWER_COOLING } PowerMode;
         HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin);
         void        init(void);
-        bool        isOn(void)                                              { return (mode == POWER_ON || mode == POWER_FIXED);             }
+        bool        isOn(void)                                              { return (mode == POWER_ON /*|| mode == POWER_FIXED*/);             }
         void        setTemp(uint16_t t)                                     { temp_set = constrain(t, temp_minC, temp_maxC); }
         uint16_t    getTemp(void)                                           { return temp_set; }
         uint16_t    getCurrTemp(void)                                       { return h_temp.last(); }
@@ -1047,10 +1094,10 @@ class HOTGUN : public PID {
         bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 15;                  }
         uint8_t     avgPowerPcnt(void);
         void        switchPower(bool On);
-        void        fixPower(uint8_t Power);                                // Set the specified power to the the hot gun
-        void        keepTemp(void);
-        void        readTemp(void);
-        uint8_t     getMaxFixedPower(void)                                  { return max_fix_power; }
+       // void        fixPower(uint8_t Power);                                // Set the specified power to the the hot gun
+        int8_t      keepTemp(void);
+        uint8_t     readTemp(void);
+        //uint8_t     getMaxFixedPower(void)                                  { return max_fix_power; }
         bool        syncCB(void);                                           // Return true at the end of the power period
         void        activateRelay(bool activate);
     private:
@@ -1216,25 +1263,31 @@ void HOTGUN::switchPower(bool On) {
     h_power.init();
 }
 
-void HOTGUN::readTemp(void) {
+uint8_t HOTGUN::readTemp(void) {
     double c = thermocouple.readTempC();
     uint16_t temp;
+    static uint8_t thermocoupleErrorCnt = 0;
 
     if (MAX6675_THERMOCOUPLE_OPEN == c || c <= 0) { //TODO: handle error condition!
         temp = h_temp.average();
+        thermocoupleErrorCnt++;
     }
     else
     {
         temp = (uint16_t)(c);
+        thermocoupleErrorCnt = 0;
     }
     //e_sensor.update(temp);
     h_temp.put(temp);
+    
+    return thermocoupleErrorCnt;
 }
 
 // This routine is used to keep the hot air gun temperature near required value
-void HOTGUN::keepTemp(void) {
+int8_t HOTGUN::keepTemp(void) {
     long p = 0;
-    readTemp();
+    uint8_t errorTc;
+    errorTc = readTemp();
     //fan_speed_sens = analogRead(sen_pin);                                   // Check the hot air fan speed
     //fan_speed_raw = fan_speed_sens;                                         // Check the hot air fan speed
 
@@ -1243,6 +1296,7 @@ void HOTGUN::keepTemp(void) {
     //uint16_t temp = e_sensor.read();                                      // Average value of the hot air gun temperature
     //h_temp.put(temp);
     uint16_t temp = getCurrTemp();
+     
     if (!chill && (mode == POWER_ON) && (temp > (temp_set + 8))) { // Prevent global over heating
         //digital_write(gun_pin, LOW);
         p = 0;
@@ -1311,6 +1365,7 @@ void HOTGUN::keepTemp(void) {
     if (p == 0) {
         digital_write(gun_pin, LOW);
     }
+    return 0;
 }
 /*
 void HOTGUN::fixPower(uint8_t Power) {
@@ -1699,6 +1754,7 @@ SCREEN* configSCREEN::menu(void) {
             break;
         case 5:                                                             // Save defaults
             pCfg->setDefaults(true);
+            resetFunc();  //call reset to auto-reboot Arduino and re-load evrything from EEPROM
             if (next) return next;
             break;
     }
@@ -2180,7 +2236,8 @@ SCREEN* fanSCREEN::menu(void){
 }
 
 SCREEN* fanSCREEN::menu_long(void){
-    pHG->switchPower(false);
+    pHG->switchPower(false); // not needed, just for safety
+    pHG->setFanDuty(0); // power off fan
     pCfg->applyFanData(fan_min, fan_max);
     pCfg->saveFanData(fan_min, fan_max);
     if (next) return next;
@@ -2256,7 +2313,7 @@ void setup() {
     }
 
     // Load configuration parameters
-    hgCfg.init();
+    cfgLoad = hgCfg.init();
     hg.init();
     uint16_t temp   = hgCfg.tempPreset();
     uint8_t  fan    = hgCfg.fanPreset();
@@ -2331,8 +2388,23 @@ void setup() {
     fan_current_min = analogRead(FAN_GUN_SENS_PIN);
     hg.setFanDuty(0);
     
+    //cfgLoad = false; //for test only
+    if(cfgLoad) {
+        if((fan_current_min >= fan_current_max) || (fan_current_min < (hgCfg.getMinFanSpeedSens())) || (fan_current_max > (hgCfg.getMaxFanSpeedSens()))) {
+           //pCurrentScreen = &errScr;
+  //         disp.message("= FAILED =", "FAN");
+           pCurrentScreen->init();
+           while(1)
+               delay(500);
+        }
     pCurrentScreen = &offScr;
     pCurrentScreen->init(); 
+}
+    // if not set, go to fan menù to set min/max values 
+    else {
+        pCurrentScreen = &fanScr;
+        pCurrentScreen->init();
+    }
 }
 
 void loop() {
