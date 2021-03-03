@@ -3,6 +3,15 @@
  * Version 1.4a
  * Released Dec 19, 2020
  */
+
+//todo: fan tune menu, poweroff fan after settin a value and retrun back to delction between min and max
+//todo: fan cooling not spinke
+//todo: isteresi per raffreddamento
+//toto: th error check should work also when not ON. Keep temp must avoid resetting back to another state after an abort
+//todo: draw current temp with different color if near, below, higher that set temp
+//todo: ADC in free running mode to continuosly pool fan current, and check against threshold during on state of the gun to prevent damages
+//todo: PID cfg menu
+
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <Wire.h>
@@ -11,65 +20,68 @@
 #include <EEPROM.h>
 #include <SPI.h>
 #include <TFT_ST7735.h>
-//#include <Adafruit_MAX31855.h>
 #include <MAX6675.h>
 
+/* DEBUG Defines*/
 //#define DISABLE_AC_CHECK
 //#define DISABLE_K_TH_CHECK 
+//#define DISABLE_FAN_CHECK
+//#define EMULATE_TEMP
 //#define PID_SCREEN
+/****************/
 
 #define digital_write    digitalWrite
 #define pin_mode         pinMode
 
 #define SLOW_D9_PWM_FREQUENCY
-#define SCREEN_WIDTH   ST7735_TFTHEIGHT //160;                                          //  display width, in pixels
-#define SCREEN_HEIGHT  ST7735_TFTWIDTH //128;                                          //  display height, in pixels
-#define _FONT_WIDTH          12 
-#define FONT_WIDTH (26)
-#define _FONT_HEIGHT         16 // (26)
-#define FONT_HEIGHT        (26)
-//#define DEGREE_CHAR      248
-//#define FAN_CHAR         70
-//#define POWER_CHAR       80
-#define ARROW            62
-#define LCD_BACKGROUND_COLOR TFT_BLACK // 0x5AEB // grey color code
-#define LCD_TEXT_COLOR       TFT_WHITE
-#define LCD_LINE_COLOR       TFT_LIGHTGREY
-#define LCD_DEFAULT_FONT     4//2//4
-#define LCD_SMALL_FONT       LCD_DEFAULT_FONT
-#define LCD_BIG_FONT         6//2//6
-#define LCD_BIG_FONT_MULTIPLIER 1
-#define LCD_STATUS_OFFSET    30
-#define X_PIXEL_OFFSET 10
-#define Y_PIXEL_OFFSET 8
-#define X_PIXEL(x) (X_PIXEL_OFFSET + x)
-#define Y_PIXEL(y) (Y_PIXEL_OFFSET + y)
+#define SCREEN_WIDTH             ST7735_TFTHEIGHT //160;                                          //  display width, in pixels
+#define SCREEN_HEIGHT            ST7735_TFTWIDTH //128;                                          //  display height, in pixels
+//#define _FONT_WIDTH            12 
+//#define FONT_WIDTH             (26) // Font 4
+//#define _FONT_HEIGHT           16 // (26)
+//#define FONT_HEIGHT            (26) // Font 4
+#define LCD_BACKGROUND_COLOR     TFT_BLACK // 0x5AEB // grey color code
+#define LCD_TEXT_COLOR           TFT_WHITE
+#define LCD_LINE_COLOR           TFT_LIGHTGREY
+#define LCD_DEFAULT_FONT         4
+#define LCD_SMALL_FONT           LCD_DEFAULT_FONT
+#define LCD_BIG_FONT             6
+#define LCD_STATUS_OFFSET        4
+#define X_PIXEL_OFFSET          10
+#define Y_PIXEL_OFFSET           8
+#define X_PIXEL(x)              (X_PIXEL_OFFSET + x)
+#define Y_PIXEL(y)              (Y_PIXEL_OFFSET + y)
     
-#define setCharCursor(x, y) setCursor((x)*_FONT_WIDTH, (y+1)*_FONT_HEIGHT)
+//#define setCharCursor(x, y) setCursor((x)*_FONT_WIDTH, (y+1)*_FONT_HEIGHT)
 #define temp_minC     100
-#define temp_maxC     500
+#define temp_maxC     450
 #define temp_ambC     25
-const uint16_t temp_tip[3]  = {200, 300, 400};                               // Temperature reference points for calibration
+const uint16_t temp_tip[3]  = {200, 300, 400};                     // Temperature reference points for calibration
 #define min_working_fan  114                                       // Minimal possible fan speed in 0-255 step
 #define max_working_fan  255
 #define max_cool_fan     240
 
-#define AC_SYNC_PIN    2                                            // Outlet 220 v synchronization pin. Do not change!
-#define HOT_GUN_PIN    7                                            // Hot gun heater management pin
-#define FAN_GUN_PIN    9                                            // Hot gun fan management pin. Do not change!
-#define FAN_GUN_SENS_PIN   A0                                       // Hot gun fan checking pin
-#define AC_RELAY_PIN   A2
+#define AC_SYNC_PIN        2                                        // Outlet 220 v synchronization pin. Do not change!
+#define HOT_GUN_PIN        7                                        // Hot gun heater management pin
+#define FAN_GUN_PIN        9                                        // Hot gun fan management pin. DO NOT CHANGE due to PWM control!
+#define FAN_GUN_SENS_PIN  A0                                        // Hot gun fan checking pin
+#define AC_RELAY_PIN      A2
 
-#define R_MAIN_PIN     3                                            // Rotary encoder main pin. Do not change!
-#define R_SECD_PIN     5                                            // Rotary encoder secondary pin
-#define R_BUTN_PIN     4                                            // Rotary encoder button pin
+#define R_MAIN_PIN         3                                        // Rotary encoder main pin. Do not change!
+#define R_SECD_PIN         5                                        // Rotary encoder secondary pin
+#define R_BUTN_PIN         4                                        // Rotary encoder button pin
 
-#define REED_SW_PIN    8                                            // Reed switch pin
-#define BUZZER_PIN     6                                            // Buzzer pin
-#define BUZZER_ACTIVE  false                                         // Active buzzer beeps when +5v supplied to it
-#define MAXCS A3
-// Initialize the Thermocouple
-//Adafruit_MAX31855 thermocouple(MAXCS);
+#define REED_SW_PIN        8                                        // Reed switch pin
+#define BUZZER_PIN         6                                        // Buzzer pin
+#define BUZZER_ACTIVE  false                                        // Active buzzer beeps when +5v supplied to it
+#define MAXCS             A3
+
+#ifdef DISABLE_AC_CHECK
+  #define TC_ERROR_TOLLERANCE 999999
+#else
+  #define TC_ERROR_TOLLERANCE 5
+#endif
+
 MAX6675 thermocouple(MAXCS);
 
 uint16_t    fan_speed_raw;
@@ -77,15 +89,27 @@ uint16_t    fan_speed_raw;
 
 void(* resetFunc) (void) = 0; //declare arduino software reset function @ address 0
 
-//#define TFT_print(stringBuff, xPos, yPos, font)   TFT_ST7735::drawString(stringBuff, (xPos)*_FONT_WIDTH, (yPos+1)*_FONT_HEIGHT, font)
-//#define TFT_print(stringBuff, xPos, yPos, font)   TFT_ST7735::drawString(stringBuff, xPos, yPos, font)
 
+//debug //#define TFT_print(stringBuff, xPos, yPos, font)   TFT_ST7735::drawString(stringBuff, (xPos)*_FONT_WIDTH, (yPos+1)*_FONT_HEIGHT, font)
+#define TFT_print(stringBuff, xPos, yPos, font)   TFT_ST7735::drawString(stringBuff, xPos, yPos, font)
 
+//#define TFT_print(stringBuff, xPos, yPos, font)     TFT_ST7735::setTextFont(font); \
+                                                    TFT_ST7735::setCursor(xPos, yPos); \
+                                                    print(stringBuff)
 
-#define TFT_print(stringBuf, xPos, yPos, font)     TFT_ST7735::setTextFont(font); \
-                                                 TFT_ST7735::setCursor(xPos, yPos); \
-                                                   print(stringBuf);
+#define TFT_centrePrint(stringBuff, xPos, yPos, font)     TFT_ST7735::drawCentreString(stringBuff, xPos, yPos, font)
+//#define TFT_centrePrint(stringBuff, xPos, yPos, font)     TFT_print(stringBuff, xPos - (TFT_ST7735::textWidth(stringBuff, font) / 2), yPos, font) // Will not work if TFT_print uses TFT_ST7735::drawString
 
+#define TFT_rightPrint(stringBuff, xPos, yPos, font)     TFT_ST7735::drawRightString(stringBuff, xPos, yPos, font)
+//#define TFT_rightPrint(stringBuff, xPos, yPos, font)      TFT_print(stringBuff, xPos - TFT_ST7735::textWidth(stringBuff, font), yPos, font) // Will not work if TFT_print uses TFT_ST7735::drawString
+
+//#define TFT_printNumber(num, xPos, yPos, font)     TFT_ST7735::drawNumber(num, xPos, yPos, font)
+#define TFT_printNumber(num, xPos, yPos, font)     TFT_ST7735::setTextFont(font); \
+                                                   TFT_ST7735::setCursor(xPos, yPos); \
+                                                   print(num)
+
+#define TFT_textPadding(p)    TFT_ST7735::setTextPadding(p)
+#define TFT_resetTextPadding()  TFT_ST7735::setTextPadding(0)
 /*
 inline void TFT_print(char *stringBuf, uint8_t xPos, uint8_t yPos, uint8_t font) {
     TFT_ST7735::setTextFont(font);
@@ -323,13 +347,13 @@ bool HOTGUN_CFG::init(void) {
     maxFanSpeedSens = Config.maxFanSpeedSens;
     return cfgLoad;
 }
-    uint32_t    calibration;                                                // Packed calibration data by three temperature points
+ /*   uint32_t    calibration;                                                // Packed calibration data by three temperature points
     uint16_t    temp;                                                       // The preset temperature of the IRON in internal units
     uint8_t     fan;                                                        // The preset fan speed 0 - 255
     uint8_t     off_timeout;                                                // Automatic switch-off timeout
     uint16_t    minFanSpeedSens;                                            // min adc value to consider fan working
     uint16_t    maxFanSpeedSens;                                            // max adc value to consider fan working
-
+*/
 uint16_t HOTGUN_CFG::tempPreset(void) {
     return Config.temp;
 }
@@ -608,9 +632,9 @@ static const uint8_t bmPower[15] PROGMEM = {
 
 class DSPL : protected TFT_ST7735 {
     public:
-        DSPL(void) : TFT_ST7735() { }
+        DSPL(void) : TFT_ST7735(SCREEN_WIDTH, SCREEN_HEIGHT) { }
         void    init(void);
-        void    clear(uint16_t bg_color = LCD_BACKGROUND_COLOR)               { TFT_ST7735::fillScreen(bg_color); TFT_ST7735::setCharCursor(0, 0);}
+        void    clear(uint16_t bg_color = LCD_BACKGROUND_COLOR)               { TFT_ST7735::fillScreen(bg_color); TFT_ST7735::setCursor(0, 0);}
         void    backgroundInit(void);
         void    tSet(uint16_t t, bool isActive = false);                      // Show the preset temperature
         void    tCurr(uint16_t t, bool isCalibration = false);                                          // Show the current temperature
@@ -626,12 +650,13 @@ class DSPL : protected TFT_ST7735 {
         void    msgFail(void);                                              // Show 'Fail' message
  //       void    msgTune(void);                                              // Show 'Tune' message
         void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
-        void    msgFanTune(uint8_t mode, uint8_t sel, uint16_t min, uint16_t max, uint16_t fan_speed_raw);
+        void    msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t min, uint16_t max, uint16_t fan_speed_raw);
         void    message(const char *msg, const char *msg1);
     private:
-        char    temp_units;
+        //const char    tempUnits[2] = {'C','\0'};
         char    buff[DSPL_MAX_BUFF_SIZE+1];
         char    buff1[DSPL_MAX_BUFF_SIZE+1];
+        uint8_t textHeight;
 };
 
 void DSPL::init(void) {
@@ -639,15 +664,14 @@ void DSPL::init(void) {
     TFT_ST7735::init();
     TFT_ST7735::setRotation(1);
     TFT_ST7735::fillScreen(LCD_BACKGROUND_COLOR);
-    TFT_ST7735::setCursor(0, 0, LCD_DEFAULT_FONT); // Set "cursor" at top left corner of display (0,0) and select font
+    TFT_ST7735::setCursor(0, 0, LCD_DEFAULT_FONT); // Set "cursor" at top left corner of display (0,0) and select font 
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR,LCD_BACKGROUND_COLOR);
 //    TFT_print("Starting ...", X_PIXEL(0), Y_PIXEL(SCREEN_HEIGHT/2 - 1 - FONT_HEIGHT/2), LCD_SMALL_FONT);
-    TFT_ST7735::drawCentreString("Starting ...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 1 - FONT_HEIGHT/2 , LCD_SMALL_FONT);
+    TFT_centrePrint("Starting ...", SCREEN_WIDTH/2, SCREEN_HEIGHT/2 - 1 - textHeight/2 , LCD_SMALL_FONT);
     //TFT_ST7735::setTextFont(LCD_DEFAULT_FONT);
     //TFT_ST7735::setTextSize(1);
-    temp_units = 'C';
+    textHeight = TFT_ST7735::fontHeight(LCD_DEFAULT_FONT);
 }
-
 #define FAN_BITMAP_X_OFFSET 16
 #define FAN_BITMAP_Y_OFFSET 26
 
@@ -669,7 +693,7 @@ void DSPL::backgroundInit(void){
 
 void DSPL::msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2){
     //char buff[17];
-    setCharCursor(0, 4);
+//    setCharCursor(0, 4);
 // tmp disable    sprintf(buff, "Cal: %3d %3d %3d", tip0, tip1, tip2);
 // tmp disable    print(buff);
 }
@@ -677,7 +701,6 @@ void DSPL::msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2){
 void DSPL::tSet(uint16_t t, bool isActive) {
     snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", t);
     //print(buff);
-    //TFT_print(buff, 0, 0, LCD_DEFAULT_FONT);
     uint16_t color = LCD_TEXT_COLOR;
     if(isActive) {
         color = TFT_GREEN;
@@ -698,131 +721,132 @@ void DSPL::tCurr(uint16_t t, bool isCalibration) {
         snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", t);
     } else {
         //print(F("xxx"));
-        //TFT_print("xxx", 0, 1, LCD_DEFAULT_FONT);
-        snprintf(buff, DSPL_MAX_BUFF_SIZE, "xxx");
+        snprintf(buff, DSPL_MAX_BUFF_SIZE, "999"); // font 6 has only numbers! print all 9 to indicate e
         //return;
     }
     if (isCalibration) {
         font = LCD_SMALL_FONT;
         yPos -= 2;
     }
-    //TFT_print(buff, 0, 1, LCD_DEFAULT_FONT);
-
-    TFT_ST7735::setTextPadding(96);
+    
+    TFT_textPadding(TFT_ST7735::textWidth("000", font));
     //TFT_print(buff, SCREEN_WIDTH/2 - 28, yPos, font);
-    TFT_ST7735::drawCentreString(buff, SCREEN_WIDTH/2 + 24, yPos, font);
-    TFT_ST7735::setTextPadding(0);
+    TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, yPos, font);
+    TFT_resetTextPadding();
 }
+
 /*
 void DSPL::tInternal(uint16_t t) {
-    //char buff[6];
-    setCharCursor(0, 1);
+   // char buff[6];
+    //setCharCursor(0, 1);
     if (t < 1023) {
-        sprintf(buff, "%4d ", t);
+        sprintf(buff, "%4d", t);
     } else {
         //print(F("xxxx"));
-        TFT_print("xxxx", 0, 1, LCD_DEFAULT_FONT);
-        return;
+        sprintf(buff, "xxxx");
+        //return;
     }
-    //print(buff);
-    TFT_print(buff, 0, 1, LCD_DEFAULT_FONT);
+    TFT_print(buff,X_PIXEL(0), Y_PIXEL(0), LCD_SMALL_FONT);
 }
 */
 
 void DSPL::tReal(uint16_t t) {
-#if 0
-    //char buff[6];
-    setCharCursor(11, 1);
     if (t < 1000) {
-        sprintf(buff, ">%3d%c", t, DEGREE_CHAR);
+        snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", t);
     } else {
-        //print(F("xxx"));
-        TFT_print("xxx", 11, 1, LCD_DEFAULT_FONT);
-        return;
+        snprintf(buff, DSPL_MAX_BUFF_SIZE, "xxx");
     }
-    //print(buff);
-    TFT_print(buff, 11, 1, LCD_DEFAULT_FONT);
-#endif
+    TFT_ST7735::setTextColor(TFT_GREEN, LCD_BACKGROUND_COLOR);
+    TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, SCREEN_HEIGHT/2 + 3, LCD_SMALL_FONT);
+    TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
 
 void DSPL::fanSpeed(uint8_t s, bool isActive) {
-    snprintf(buff, DSPL_MAX_BUFF_SIZE, " %3d%c", s, '%');
+    snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d%c", s, '%');
     uint16_t color = LCD_TEXT_COLOR;
     if (isActive) {
         color = TFT_GREEN;
         TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
     }
-    TFT_ST7735::setTextPadding(14*3+17+1);
-    //TFT_print(buff, 0, 4, LCD_DEFAULT_FONT);
-    TFT_print(buff,X_PIXEL(FAN_BM_WIDTH/*icon pixel*/+FAN_BITMAP_X_OFFSET+16), SCREEN_HEIGHT - Y_PIXEL_OFFSET - 16, LCD_SMALL_FONT);
- //   TFT_ST7735::drawRightString(buff,X_PIXEL(FAN_BM_WIDTH/*icon pixel*/+FAN_BITMAP_X_OFFSET+16/*offset*/+ 14/*pixel per font number*/*3/*number character*/+17/*percent char*/), SCREEN_HEIGHT - Y_PIXEL_OFFSET - 16, LCD_SMALL_FONT);
-    TFT_ST7735::setTextPadding(0);
+
+    ///*TFT_textPadding*/TFT_ST7735::setTextPadding(TFT_ST7735::textWidth("100%", LCD_SMALL_FONT/*14*3+17+1*/));
+    //TFT_ST7735::fillRect( 54,101,9,19,TFT_YELLOW);
+    
+    uint16_t maxStringWidth = TFT_ST7735::textWidth("100%", LCD_SMALL_FONT);
+    // clear extra digit
+    if (s < 100) {
+        uint8_t padding = maxStringWidth - TFT_ST7735::textWidth("00%", LCD_SMALL_FONT); // fan speed will never go under 10, 2 digits + % char
+        TFT_ST7735::fillRect( X_PIXEL(FAN_BM_WIDTH/*icon pixel*/ + FAN_BITMAP_X_OFFSET + 16/*offset*/), SCREEN_HEIGHT - 1 - textHeight, padding, textHeight-7, LCD_BACKGROUND_COLOR);
+    }
+  //  TFT_print(buff,X_PIXEL(FAN_BM_WIDTH/*icon pixel*/+FAN_BITMAP_X_OFFSET+16), SCREEN_HEIGHT - Y_PIXEL_OFFSET - 16, LCD_SMALL_FONT);
+    TFT_rightPrint(buff,X_PIXEL(FAN_BM_WIDTH/*icon pixel*/ + FAN_BITMAP_X_OFFSET + 16/*offset*/ + maxStringWidth), SCREEN_HEIGHT - 1 - textHeight/*16*/, LCD_SMALL_FONT);
+  //  TFT_resetTextPadding();
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
 
 void DSPL::appliedPower(uint8_t p, bool show_zero) {
     if (p > 99) p = 99;
     if (p == 0 && !show_zero) {
-        //TFT_print("     ", 5, 1, LCD_DEFAULT_FONT);
         snprintf(buff, DSPL_MAX_BUFF_SIZE, " -");
     } else {
         snprintf(buff, DSPL_MAX_BUFF_SIZE, "%2d", p);
     }
-        //TFT_print(buff, 5, 1, LCD_DEFAULT_FONT);
-    TFT_ST7735::setTextPadding(14*2);
+    TFT_textPadding(TFT_ST7735::textWidth("00", LCD_SMALL_FONT)/*14*2*/);
     TFT_print(buff,X_PIXEL(7), SCREEN_HEIGHT/2 - 1, LCD_SMALL_FONT);
-    TFT_ST7735::setTextPadding(0);
+    TFT_resetTextPadding();
 }
-char menu[6][10] = {"calibrate", "   tune", "   fan", "   save", "  cancel", "reset cfg"};
 #define LCD_MENU_FONT    4
 void DSPL::setupMode(byte mode) {
+    char menu[6][10] = {"calibrate", "   tune", "   fan", "   save", "  cancel", "reset cfg"};
     clear();
+    //TFT_ST7735::drawString("menu >",X_PIXEL(8), (SCREEN_HEIGHT-24)/3-10, LCD_MENU_FONT);
     //print(F("Setup"));
-    TFT_print(menu[mode], 0, 0, LCD_DEFAULT_FONT);
- #if 0
-   setCharCursor(1,1);
+    //setCharCursor(1,1);
+    //TFT_ST7735::setTextFont(LCD_MENU_FONT);
+    
+   // TFT_ST7735::setCursor(X_PIXEL(10), (SCREEN_HEIGHT-textHeight) / 2);
+    TFT_centrePrint(menu[mode], /*X_PIXEL(16)*/ SCREEN_WIDTH/2 -1, (SCREEN_HEIGHT/2) - 1 - textHeight/2, LCD_MENU_FONT);
+    //print(menu[mode]);
+    /*
     switch (mode) {
         case 0:                                                             // tip calibrate
-            //print(F("calibrate"));
-            TFT_print("calibrate", 1, 1, LCD_DEFAULT_FONT);
+            print(F("calibrate"));
             break;
         case 1:                                                             // tune
-            //print(F("tune"));
-            TFT_print("tune", 1, 1, LCD_DEFAULT_FONT);
+            print(F("tune"));
             break;
         case 2:
-            //print(F(("fan")));
-            TFT_print("fan", 1, 1, LCD_DEFAULT_FONT);
+            print(F(("fan")));
             break;
         case 3:                                                             // save
-            //print(F("save"));
-            TFT_print("save", 1, 1, LCD_DEFAULT_FONT);
+            print(F("save"));
             break;
         case 4:                                                             // cancel
-            //print(F("cancel"));
-            TFT_print("cancel", 1, 1, LCD_DEFAULT_FONT);
+            print(F("cancel"));
             break;
         case 5:                                                             // set defaults
-            //print(F("reset config"));
-            TFT_print("reset config", 1, 1, LCD_DEFAULT_FONT);
+            print(F("reset config"));
             break;
         default:
             break;
-    }
-#endif
+    }*/
+    //TFT_ST7735::setTextFont(font);
 }
-
+//#define LCD_STATUS_PADDING    40
+//const char statusMsg[2][4] = {"on","off"};
 void DSPL::msgON(uint16_t color) {
-//    TFT_print("    ON", 10, 0, LCD_DEFAULT_FONT);
+    //setCharCursor(10, 0);
+    //print(F("    on"));
     TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
-    TFT_print("on", SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
+//  TFT_print("on", SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
+    TFT_rightPrint("on", SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
 
 void DSPL::msgOFF(uint16_t color) {
- //   TFT_print("   OFF", 10, 0, LCD_DEFAULT_FONT);
     TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
-    TFT_print("off",SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
+//  TFT_print("off",SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
+    TFT_rightPrint("off",SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
 
@@ -835,47 +859,73 @@ void DSPL::msgCold(void) {
 }
 
 void DSPL::msgFail(void) {
-//    TFT_print(" -== Failed ==- ", 0, 1, LCD_DEFAULT_FONT);
     TFT_ST7735::setTextColor(TFT_WHITE, TFT_RED);
     clear(TFT_RED);
-//    TFT_print(buff, X_PIXEL(0), SCREEN_HEIGHT/2 - FONT_HEIGHT - 4, LCD_DEFAULT_FONT);
-//    TFT_print(buff1, X_PIXEL(0), SCREEN_HEIGHT/2 + 4, LCD_DEFAULT_FONT);
-    TFT_ST7735::drawCentreString(buff, SCREEN_WIDTH/2 -1, SCREEN_HEIGHT/2 - FONT_HEIGHT - 4, LCD_DEFAULT_FONT);
-    TFT_ST7735::drawCentreString(buff1, SCREEN_WIDTH/2 -1, SCREEN_HEIGHT/2 + 4, LCD_DEFAULT_FONT);
+    TFT_centrePrint(buff, SCREEN_WIDTH/2 -1, SCREEN_HEIGHT/2 - textHeight - 4, LCD_DEFAULT_FONT);
+    TFT_centrePrint(buff1, SCREEN_WIDTH/2 -1, SCREEN_HEIGHT/2 + 4, LCD_DEFAULT_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
-/*
-void DSPL::msgTune(void) {
+
+/*void DSPL::msgTune(void) {
     setCharCursor(0, 0);
-   // print(F("Tune"));
-    TFT_print("Tune", 0, 0, LCD_DEFAULT_FONT);
-}
-*/
-void DSPL::msgFanTune(uint8_t mode, uint8_t sel, uint16_t min, uint16_t max, uint16_t fan_speed_raw)  {
-    //char buff[20];
-    setCharCursor(0, 0);
-   // print(F("Fan Tune"));
-    TFT_print("Fan Tune", 0, 0, LCD_DEFAULT_FONT);
-    if (0 == sel) {
-        setCharCursor(0, 1);
-        sprintf(buff, "%c min: %4d", ARROW, min);
-        //print(buff);
-        TFT_print(buff, 0, 20, LCD_DEFAULT_FONT);
-        setCharCursor(0, 2);
-        sprintf(buff, "  max: %4d", max);
-        TFT_print(buff, 0, 40, LCD_DEFAULT_FONT);
-        //print(buff);
+//tmp disable    print(F("Tune"));
+}*/
+
+void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_max, uint16_t fan_speed_raw)  {
+    uint16_t max_color = LCD_TEXT_COLOR;
+    TFT_print("Fan Tune",X_PIXEL(0), Y_PIXEL(0), LCD_DEFAULT_FONT);
+    
+    // fisrt time call will have modeSel = TRUE so the selection arrow will be initialized!
+    // selection mode, all text with same color, just set the strings and the arrow to the correct line
+    if (modeSel)
+    {
+        // prepare text strings, will be hold on screen when in edit mode
+        snprintf(buff, DSPL_MAX_BUFF_SIZE, "min: ");
+        TFT_print(buff, X_PIXEL(18), Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
+        snprintf(buff, DSPL_MAX_BUFF_SIZE, "max: ");
+        TFT_print(buff, X_PIXEL(18), Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+        if (0 == sel){
+            TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
+            TFT_print("   ", X_PIXEL(0), Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+        }
+        else {
+            TFT_print("   ", X_PIXEL(0), Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
+            TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+        }
     }
+    // value edit mode, higlight the editable text 
     else {
-        setCharCursor(0, 1);
-        sprintf(buff, "  min: %4d", min);
-        //print(buff);
-        TFT_print(buff, 0, 20, LCD_DEFAULT_FONT);
-        setCharCursor(0, 2);
-        sprintf(buff, "%c max: %4d", ARROW, max);
-       // print(buff);
-        TFT_print(buff, 0, 40, LCD_DEFAULT_FONT);
+      if (0 == sel) {
+        TFT_ST7735::setTextColor(TFT_GREEN, LCD_BACKGROUND_COLOR);
+        //snprintf(&buff[5], DSPL_MAX_BUFF_SIZE, "%4d", f_min);
+      }
+      else {
+        max_color = TFT_GREEN;
+        //snprintf(&buff1[5], DSPL_MAX_BUFF_SIZE, "%4d", f_max);
+      }
     }
+    
+    TFT_textPadding(TFT_ST7735::textWidth("1000", LCD_DEFAULT_FONT)/*14*4*/);
+    snprintf(buff, DSPL_MAX_BUFF_SIZE, "%4d", f_min);
+    TFT_rightPrint(buff, SCREEN_WIDTH - X_PIXEL_OFFSET - 5, Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
+    //TFT_print(buff, X_PIXEL(18), Y_PIXEL(FONT_HEIGHT + 4), LCD_DEFAULT_FONT);
+    TFT_ST7735::setTextColor(max_color, LCD_BACKGROUND_COLOR);
+    
+    snprintf(buff, DSPL_MAX_BUFF_SIZE, "%4d", f_max);
+    TFT_rightPrint(buff, SCREEN_WIDTH - X_PIXEL_OFFSET - 5, Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+    //TFT_print(buff1, X_PIXEL(18), Y_PIXEL(FONT_HEIGHT * 2 + 4), LCD_DEFAULT_FONT);
+    TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
+    TFT_resetTextPadding();
+    // draw fan icon
+    TFT_ST7735::drawBitmap(X_PIXEL(FAN_BITMAP_X_OFFSET + 16), SCREEN_HEIGHT - Y_PIXEL_OFFSET - 26 + 4, bmFan, FAN_BM_WIDTH, FAN_BM_HEIGHT, TFT_CYAN);
+    uint16_t maxStringWidth = TFT_ST7735::textWidth("1023", LCD_SMALL_FONT); // Max adc read value
+    snprintf(buff, DSPL_MAX_BUFF_SIZE, "%4d", fan_speed_raw);
+    uint8_t padding = maxStringWidth - TFT_ST7735::textWidth(buff, LCD_SMALL_FONT); // fan current read by adc should never go under 100
+    // clear extra digit
+    TFT_ST7735::fillRect(X_PIXEL(FAN_BITMAP_X_OFFSET + 16 + FAN_BM_WIDTH/*icon pixel*/ + 16/*offset*/), SCREEN_HEIGHT - 1 - textHeight, padding, textHeight-7, LCD_BACKGROUND_COLOR);
+    TFT_rightPrint(buff, X_PIXEL(FAN_BITMAP_X_OFFSET + 16 + FAN_BM_WIDTH/*icon pixel*/ + 16/*offset*/ + maxStringWidth), SCREEN_HEIGHT - 1 - Y_PIXEL_OFFSET - textHeight, LCD_DEFAULT_FONT);
+    //TFT_printNumber(fan_speed_raw, X_PIXEL(FAN_BITMAP_X_OFFSET + FAN_BM_WIDTH + 32), SCREEN_HEIGHT - Y_PIXEL_OFFSET - FONT_HEIGHT, LCD_DEFAULT_FONT);
+    
 }
 
 void DSPL::message(const char *msg, const char *msg1) {
@@ -893,9 +943,8 @@ void DSPL::message(const char *msg, const char *msg1) {
     buff1[0] = '\0';
   }
 }
-
 //------------------------------------------ class HISTORY ----------------------------------------------------
-#define H_LENGTH 16
+#define H_LENGTH 8 //16 /* must be greater that 3! */
 class HISTORY {
     public:
         HISTORY(void)                                                       { len = 0; }
@@ -1079,7 +1128,7 @@ class FastPWM_D9 {
         FastPWM_D9()                                { }
         void init(void);
         void duty(uint8_t d)                        { OCR1A = d; }
-        uint8_t     fanSpeed(void)                  { /*TODO: get fan speed  from sensing resistor here*/ return 255; /*analogRead(sen_pin);*/ }
+        uint8_t     fanSpeed(void)                  { return OCR1A; }
         uint16_t    fanCurrent(void)                { return analogRead(FAN_GUN_SENS_PIN); }
 };
 
@@ -1106,7 +1155,7 @@ void FastPWM_D9::init(void) {
 class HOTGUN : public PID {
     public:
         typedef enum { POWER_OFF, POWER_ON, POWER_COOLING } PowerMode;
-        HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin);
+        HOTGUN(/*uint8_t HG_sen_pin,*/ uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin);
         void        init(void);
         bool        isOn(void)                                              { return (mode == POWER_ON /*|| mode == POWER_FIXED*/);             }
         void        setTemp(uint16_t t)                                     { temp_set = constrain(t, temp_minC, temp_maxC); }
@@ -1116,11 +1165,11 @@ class HOTGUN : public PID {
         void        fillTempQueue(uint16_t t)                               { h_temp.put(t); }
         uint8_t     powerAverage(void)                                      { return h_power.average(); }
         uint8_t     appliedPower(void)                                      { return actual_power; }
-        void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_fan_speed);   }
+        void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_working_fan);   } //set fan speed value but not update PWM register
         uint8_t     getFanSpeed(void)                                       { return fan_speed; }
         void        setFanDuty(uint8_t d)                                   { hg_fan.duty(d); }
         uint16_t    getFanCurrent(void)                                     { return hg_fan.fanCurrent(); }                                
-        uint8_t	    presetFanPcnt(void);
+        uint8_t      presetFanPcnt(void);
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
         bool        isCold(void)                                            { return h_temp.average() < temp_gun_cold;                      }
         bool        areExternalInterrupts(void)                             { return millis() - last_period < period * 15;                  }
@@ -1139,8 +1188,6 @@ class HOTGUN : public PID {
         FastPWM_D9  hg_fan;
         uint16_t    temp_set;                                               // The preset temperature of the hot air gun (internal units)
         uint8_t     fan_speed;
-        uint16_t    fan_speed_sens;
-        uint8_t     sen_pin;
         uint8_t     gun_pin;
         uint8_t     relay_pin;
         HISTORY     h_power;                                                // The history queue of power applied values
@@ -1159,16 +1206,16 @@ class HOTGUN : public PID {
        // const       uint16_t    int_temp_max    = 900;                      // The raw ADC temp value 900 corresponds to about 400Â°C
         const       uint8_t     max_fix_power   = 70;
         const       uint8_t     max_power       = 99;
-        const       uint16_t    min_fan_speed   = 140;
-        const       uint16_t    max_fan_speed   = 255;
-     //   const       uint16_t    max_cool_fan    = 220;
+        //const       uint16_t    min_fan_speed   = 30;
+        //const       uint16_t    max_fan_speed   = max_working_fan;
+        //const       uint16_t    max_cool_fan    = 220;
         const       uint16_t    temp_gun_cold   = 50;                       // The temperature of the cold iron
         //const       uint8_t     e_sensor_length = 10;                       // Exponential average length of sensor data
         const       uint32_t    relay_activate  = 1;        // The relay activation delay
 };
 
-HOTGUN::HOTGUN(uint8_t HG_sen_pin, uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin) {
-    sen_pin   = HG_sen_pin;
+HOTGUN::HOTGUN(/*uint8_t HG_sen_pin,*/ uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin) {
+    //sen_pin   = HG_sen_pin;
     gun_pin   = HG_pwr_pin;
     relay_pin = HG_ACrelay_pin;
 }
@@ -1181,7 +1228,7 @@ void HOTGUN::init(void) {
     active      = false;
     chill       = false;
     last_period = 0;
-    pin_mode(sen_pin, INPUT);
+    //pin_mode(sen_pin, INPUT);
     pin_mode(gun_pin, OUTPUT);
     pin_mode(relay_pin, OUTPUT);
     digital_write(gun_pin, LOW);
@@ -1243,7 +1290,7 @@ void HOTGUN::switchPower(bool On) {
         case POWER_ON:
             if (!On) {
                 mode = POWER_COOLING;
-                activateRelay(false);
+                //activateRelay(false); // will be done next in shutdown
             }
             break;
 /*        case POWER_FIXED:
@@ -1296,25 +1343,26 @@ void HOTGUN::switchPower(bool On) {
 }
 
 uint8_t HOTGUN::readTemp(void) {
-    double c = thermocouple.readTempC();
-    uint16_t temp;
+    int16_t temp = (int16_t)(thermocouple.readTempC());
     static uint8_t thermocoupleErrorCnt = 0;
-
-    if (MAX6675_THERMOCOUPLE_OPEN == c || c <= 0) { //TODO: handle error condition!
+    
+    //Serial.println(temp);
+    if ((/*MAX6675_THERMOCOUPLE_OPEN == temp ||*/ temp <= 0) && isOn()) { // MAX6675_THERMOCOUPLE_OPEN is -1 so checking for <= includes open connection error!
         temp = h_temp.average();
         thermocoupleErrorCnt++;
+        //Serial.println("th error");
     }
     else
     {
-        temp = (uint16_t)(c);
         thermocoupleErrorCnt = 0;
+        //Serial.println("th ok");
     }
 
     //e_sensor.update(temp);
-#ifdef DISABLE_AC_CHECK
+#ifdef EMULATE_TEMP
     temp = emulateTemp();
 #endif
-    h_temp.put(temp);
+    h_temp.put((uint16_t)temp);
     
     return thermocoupleErrorCnt;
 }
@@ -1325,13 +1373,24 @@ int8_t HOTGUN::keepTemp(void) {
     uint8_t errorTc;
     errorTc = readTemp();
     //fan_speed_sens = analogRead(sen_pin);                                   // Check the hot air fan speed
-    //fan_speed_raw = fan_speed_sens;                                         // Check the hot air fan speed
+    //fan_speed_raw = analogRead(sen_pin);//fan_speed_sens;                                         // Check the hot air fan speed
 
     //uint16_t temp = analogRead(sen_pin);                                  // Check the hot air gun temperature
     //double c = thermocouple.readCelsius();
     //uint16_t temp = e_sensor.read();                                      // Average value of the hot air gun temperature
     //h_temp.put(temp);
+
+    if(errorTc > TC_ERROR_TOLLERANCE &&  isOn())
+    {
+        // In case of error in temperature reading shutdown immediately
+        // but leave the fan spinning at max speed for safety and cool down the heater 
+        shutdown();
+        hg_fan.duty(max_working_fan);
+        return -1;
+    }
+    
     uint16_t temp = getCurrTemp();
+    uint8_t fan;
      
     if (!chill && (mode == POWER_ON) && (temp > (temp_set + 8))) { // Prevent global over heating
         //digital_write(gun_pin, LOW);
@@ -1342,11 +1401,12 @@ int8_t HOTGUN::keepTemp(void) {
     switch (mode) {
         case POWER_OFF:
              if (!isCold()) {                                               // FAN && connected && !cold
-                        //uint16_t fan = map(temp, temp_gun_cold, temp_set, max_cool_fan, min_fan_speed);
-                        fan = constrain(/*fan*/fan_speed, min_fan_speed, max_fan_speed);
-                        hg_fan.duty(fan);
-                        mode = POWER_COOLING;
-                    }
+                /*uint16_t*/ fan = map(temp, temp_gun_cold, temp_maxC, max_cool_fan, min_working_fan);
+                //fan = max_cool_fan;
+                fan = constrain(fan, min_working_fan, max_working_fan);
+                hg_fan.duty(fan);
+                mode = POWER_COOLING;
+            }
             break;
         case POWER_ON:
             hg_fan.duty(fan_speed);                                         // Turn on the fan immediately
@@ -1377,15 +1437,16 @@ int8_t HOTGUN::keepTemp(void) {
             hg_fan.duty(fan_speed);
             break;*/
         case POWER_COOLING:
-            if (hg_fan.fanSpeed() < min_fan_speed) {
+            if (hg_fan.fanSpeed() < min_working_fan) {
                 shutdown();
             } else {
                 if (isGunConnected()) {
                     if (isCold()) {                                         // FAN && connected && cold
                         shutdown();
                     } else {                                                // FAN && connected && !cold
-                        //uint16_t fan = map(temp, temp_gun_cold, temp_set, max_cool_fan, min_fan_speed);
-                        fan = constrain(/*fan*/fan_speed, min_fan_speed, max_fan_speed);
+                        /*uint16_t*/ fan = map(temp, temp_gun_cold, temp_maxC, max_cool_fan, min_working_fan);
+                        //fan = max_cool_fan;
+                        fan = constrain(fan, min_working_fan, max_working_fan);
                         hg_fan.duty(fan);
                     }
                 } else {                                                    // FAN && !connected
@@ -1463,10 +1524,10 @@ void HOTGUN::activateRelay(bool activate) {
     }
 }
 
-uint8_t	HOTGUN::presetFanPcnt(void) {
-	uint16_t pcnt = map(fan_speed, 0, max_fan_speed, 0, 100);
-	if (pcnt > 100) pcnt = 100;
-	return pcnt;
+uint8_t HOTGUN::presetFanPcnt(void) {
+  uint16_t pcnt = map(fan_speed, 0, max_working_fan, 0, 100);
+  if (pcnt > 100) pcnt = 100;
+  return pcnt;
 }
 
 //------------------------------------------ class SCREEN ------------------------------------------------------
@@ -1544,12 +1605,13 @@ void mainSCREEN::rotaryValue(int16_t value) {
     if (mode_temp) {                                                        // set hot gun temperature
         uint16_t temp = pCfg->tempInternal(value);
         pHG->setTemp(temp);
-        pD->tSet(value, true);
+        //pD->tSet(value, true);
     } else {                                                                // set fan speed
         pHG->setFanSpeed(value);
-        pD->fanSpeed(pHG->presetFanPcnt(), true);
+        //pD->fanSpeed(pHG->presetFanPcnt(), true);
     }
-    update_screen  = millis() + period;
+    //update_screen  = millis() + period;
+    forceRedraw();
 }
 
 SCREEN* mainSCREEN::show(void) {
@@ -1579,7 +1641,7 @@ SCREEN* mainSCREEN::show(void) {
     } else {
         pD->msgOFF();
     }
-    pD->tCurr(tempH);
+    pD->tCurr(tempH/*pHG->getCurrTemp()*//*(uint16_t)thermocouple.readTempC()*/);
     pD->appliedPower(0, false);
     pD->fanSpeed(pHG->presetFanPcnt(), !mode_temp);
     return this;
@@ -1649,12 +1711,13 @@ void workSCREEN::rotaryValue(int16_t value) {                               // S
         ready = false;
         uint16_t temp = pCfg->tempInternal(value);                          // Translate human readable temperature into internal value
         pHG->setTemp(temp);
-        pD->tSet(value, true);
+        //pD->tSet(value, true);
     } else {
         pHG->setFanSpeed(value);
-        pD->fanSpeed(pHG->presetFanPcnt(), true);
+        //pD->fanSpeed(pHG->presetFanPcnt(), true);
     }
-    update_screen = millis() + period;
+    //update_screen = millis() + period;
+    forceRedraw();
 }
 
 SCREEN* workSCREEN::show(void) {
@@ -1677,7 +1740,7 @@ SCREEN* workSCREEN::show(void) {
 //uint32_t disp = pHG->tempDispersion();
 //Serial.print(", Dispersion = "); Serial.println(disp);
 
-    if ((abs(temp_set - temp) < 5) && (pHG->tempDispersion() <= 20))  {
+    if ((abs(temp_set - temp) < 2) && (pHG->tempDispersion() <= 10))  {
         if (!ready) {
             pBz->shortBeep();
             ready = true;
@@ -2248,9 +2311,9 @@ void fanSCREEN::init(void) {
 
 SCREEN* fanSCREEN::show(void){
     if (millis() < update_screen) return this;
-    update_screen       = millis() + period;
+    update_screen = millis() + period;
     fan_speed_raw = pHG->getFanCurrent();//analogRead(FAN_GUN_SENS_PIN);
-       pD->msgFanTune(modeSel,fanSet,fan_min, fan_max,fan_speed_raw);
+    pD->msgFanTune(modeSel, fanSet, fan_min, fan_max, fan_speed_raw);
     return this;
 }
 
@@ -2301,7 +2364,7 @@ void fanSCREEN::rotaryValue(int16_t value){
 }
 
 //=========================================================================================================
-HOTGUN      hg(FAN_GUN_SENS_PIN, HOT_GUN_PIN, AC_RELAY_PIN);
+HOTGUN      hg(/*FAN_GUN_SENS_PIN,*/ HOT_GUN_PIN, AC_RELAY_PIN);
 DSPL        disp;
 ENCODER     rotEncoder(R_MAIN_PIN, R_SECD_PIN);
 BUTTON      rotButton(R_BUTN_PIN);
@@ -2333,14 +2396,21 @@ void rotEncChange(void) {
 }
 
 void setup() {
+ // Serial.begin(115200);
     uint16_t fan_current_min, fan_current_max;
     boolean cfgLoad;
-
     disp.init();
-
+    
+#ifdef DISABLE_AC_CHECK
+    // Initialize rotary encoder
+    rotEncoder.init();
+    rotButton.init();
+#else
     // Initialize rotary encoder
     rotEncoder.init(false);
     rotButton.init(false);
+#endif
+
     delay(100);
     int buttonState = digitalRead(R_BUTN_PIN); // pressed = LOW, open = HIGH
     delay(500);
@@ -2389,7 +2459,7 @@ void setup() {
     
     // safety check: detect gun by reading reed wsitch status. When connected and in the cradle it must be LOW.
     // If status is HIGH the gun can be either not connected or connected but not in the cradle.
-    // Do not contiune until th e status is LOW!
+    // Do not contiune until the status is LOW!
     if (reedSwitch.status() != LOW) {
     //while(reedSwitch.status() != LOW){
        //pCurrentScreen = &errScr;
@@ -2401,14 +2471,14 @@ void setup() {
            delay(50);
            //cnt = cnt + ((reedSwitch.status() == LOW) ? 1 : 0);
        }
-       }
+    }
 
 #ifndef DISABLE_K_TH_CHECK    
     // K-type Thermocouple safety check
     uint8_t queueId;
     for(queueId=0; queueId<(H_LENGTH-1); queueId++) { // leave last idx free for next read
-        double readTemp = thermocouple.readTempC();
-        if(MAX6675_THERMOCOUPLE_OPEN == readTemp || readTemp < 0) {
+        int16_t readTemp = (int16_t)(thermocouple.readTempC());
+        if(/*MAX6675_THERMOCOUPLE_OPEN == readTemp ||*/ readTemp < 0) {
            disp.message("= FAILED =", "K - Therm");
            pCurrentScreen->init();
            while(1)
@@ -2428,7 +2498,7 @@ void setup() {
     delay(3000);
     fan_current_min = analogRead(FAN_GUN_SENS_PIN);
     hg.setFanDuty(0);
-    
+
     //cfgLoad = false; //for test only
     if(cfgLoad) {
         if((fan_current_min >= fan_current_max) || (fan_current_min < (hgCfg.getMinFanSpeedSens())) || (fan_current_max > (hgCfg.getMaxFanSpeedSens()))) {
@@ -2438,17 +2508,17 @@ void setup() {
            while(1)
                delay(500);
         }
-    pCurrentScreen = &offScr;
-    pCurrentScreen->init(); 
-}
-    // if not set, go to fan menù to set min/max values 
+        pCurrentScreen = &offScr;
+        pCurrentScreen->init();   
+    }
+    // if not set, go to fan menu to set min/max values 
     else {
         pCurrentScreen = &fanScr;
         pCurrentScreen->init();
     }
 }
 
-void loop() {
+void loop(){
     static bool     reset_encoder   = true;
     static int16_t  old_pos         = 0;
 #ifdef DISABLE_AC_CHECK
@@ -2514,6 +2584,8 @@ int8_t hgError;
     */
     if (end_of_power_period) {                                              // Calculate the required power
         hgError = hg.keepTemp();
+        //Serial.print("hgERR ");
+        //Serial.println(hgError);
         if(0 != hgError) {
             nxt = &errScr;
             if (nxt != pCurrentScreen) {
@@ -2527,13 +2599,13 @@ int8_t hgError;
     }
 
 #ifdef DISABLE_AC_CHECK
-        if (millis() > ac_check) {
-          syncAC();
-          ac_check = millis() + 5;
-        }
-#endif
-        if (millis() > ac_check) {
+    if (millis() > ac_check) {
+        syncAC();
+        ac_check = millis() + 5;
+#else
+    if (millis() > ac_check) {
         ac_check = millis() + 1000;
+#endif
 #ifndef DISABLE_AC_CHECK
         if (!hg.areExternalInterrupts()) {
             nxt = &errScr;
