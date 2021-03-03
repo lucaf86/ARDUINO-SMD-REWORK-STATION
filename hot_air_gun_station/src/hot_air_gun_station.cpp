@@ -4,13 +4,12 @@
  * Released Dec 19, 2020
  */
 
-//todo: fan tune menu, poweroff fan after settin a value and retrun back to delction between min and max
-//todo: fan cooling not spinke
-//todo: isteresi per raffreddamento
-//toto: th error check should work also when not ON. Keep temp must avoid resetting back to another state after an abort
+f//toto: thermocouple error check should work also when not ON. Keep temp must avoid resetting back to another state after an abort
 //todo: draw current temp with different color if near, below, higher that set temp
 //todo: ADC in free running mode to continuosly pool fan current, and check against threshold during on state of the gun to prevent damages
 //todo: PID cfg menu
+//todo: if possible try to avoid AC synch error on power off
+
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -46,6 +45,7 @@
 #define LCD_DEFAULT_FONT         4
 #define LCD_SMALL_FONT           LCD_DEFAULT_FONT
 #define LCD_BIG_FONT             6
+//#define LCD_BIG_FONT_MULTIPLIER  1
 #define LCD_STATUS_OFFSET        4
 #define X_PIXEL_OFFSET          10
 #define Y_PIXEL_OFFSET           8
@@ -53,9 +53,11 @@
 #define Y_PIXEL(y)              (Y_PIXEL_OFFSET + y)
     
 //#define setCharCursor(x, y) setCursor((x)*_FONT_WIDTH, (y+1)*_FONT_HEIGHT)
-#define temp_minC     100
-#define temp_maxC     450
-#define temp_ambC     25
+#define temp_minC                100            // min configurable temperature setpoint
+#define temp_maxC                450            // Max configurable temperature setpoint
+#define temp_ambC                 25            // Ambient temperature
+#define temp_gun_cold             40            // The temperature to consider the cold iron
+#define temp_gun_cold_hysteresis  20            // delta T applied to temp_gun_cold before switcing fan on again
 const uint16_t temp_tip[3]  = {200, 300, 400};                     // Temperature reference points for calibration
 #define min_working_fan  114                                       // Minimal possible fan speed in 0-255 step
 #define max_working_fan  255
@@ -553,31 +555,30 @@ void BUZZER::failedBeep(void) {
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
 const uint8_t bmDegree[5] PROGMEM = {0b00111000,
-                                    0b01000100,
-                                    0b01000100,
-                                    0b01000100,
-                                    0b00111000};
- const uint8_t bmTemperature[20] PROGMEM ={
-      0b00010000,
-      0b00101000,
-      0b01101000,
-      0b00101000,
-      0b01101000,
-      0b00101000,
-      0b00101000,
-      0b00101000,
-      0b00101000,
-      0b00111000,
-      0b00111000,
-      0b00111000,
-      0b00111000,
-      0b00111000,
-      0b01111100,
-      0b11111110,
-      0b11111110,
-      0b11111110,
-      0b01111100,
-      0b00111000};
+                                     0b01000100,
+                                     0b01000100,
+                                     0b01000100,
+                                     0b00111000};
+ const uint8_t bmTemperature[20] PROGMEM ={0b00010000,
+                                           0b00101000,
+                                           0b01101000,
+                                           0b00101000,
+                                           0b01101000,
+                                           0b00101000,
+                                           0b00101000,
+                                           0b00101000,
+                                           0b00101000,
+                                           0b00111000,
+                                           0b00111000,
+                                           0b00111000,
+                                           0b00111000,
+                                           0b00111000,
+                                           0b01111100,
+                                           0b11111110,
+                                           0b11111110,
+                                           0b11111110,
+                                           0b01111100,
+                                           0b00111000};
 /*static const uint8_t bmFan[4][32] PROGMEM = {
    {0x07, 0x00, 0x07, 0x00, 0x03, 0x80, 0x03, 0x80, 0x01, 0x80, 0x01, 0x80,
     0x01, 0x80, 0x03, 0xc0, 0x03, 0xc0, 0x0f, 0x70, 0x1c, 0x3b, 0x38, 0x1f,
@@ -593,40 +594,38 @@ const uint8_t bmDegree[5] PROGMEM = {0b00111000,
     0x1c, 0x00, 0x3c, 0x00, 0x3e, 0x00, 0x0e, 0x00 }};*/
 #define FAN_BM_WIDTH 16
 #define FAN_BM_HEIGHT 16
- static const uint8_t bmFan[FAN_BM_WIDTH/8 * FAN_BM_HEIGHT] PROGMEM = {
-     0b00000111, 0b11000000,
-     0b00000111, 0b11100000,
-     0b00000011, 0b11110000,
-     0b00000011, 0b11110000,
-     0b00000001, 0b11100000,
-     0b00000001, 0b11000000,
-     0b00000001, 0b11000000,
-     0b00100011, 0b11000000,
-     0b01111111, 0b11000000,
-     0b11111111, 0b11110000,
-     0b11111100, 0b11111010,
-     0b11111000, 0b11111110,
-     0b01111000, 0b01111110,
-     0b01110000, 0b01111100,
-     0b00110000, 0b00111100,
-     0b00000000, 0b00011000 };   
+ static const uint8_t bmFan[FAN_BM_WIDTH/8 * FAN_BM_HEIGHT] PROGMEM = { 0b00000111, 0b11000000,
+                                                                        0b00000111, 0b11100000,
+                                                                        0b00000011, 0b11110000,
+                                                                        0b00000011, 0b11110000,
+                                                                        0b00000001, 0b11100000,
+                                                                        0b00000001, 0b11000000,
+                                                                        0b00000001, 0b11000000,
+                                                                        0b00100011, 0b11000000,
+                                                                        0b01111111, 0b11000000,
+                                                                        0b11111111, 0b11110000,
+                                                                        0b11111100, 0b11111010,
+                                                                        0b11111000, 0b11111110,
+                                                                        0b01111000, 0b01111110,
+                                                                        0b01110000, 0b01111100,
+                                                                        0b00110000, 0b00111100,
+                                                                        0b00000000, 0b00011000 };   
 
-static const uint8_t bmPower[15] PROGMEM = {
-  0b00011111,
-  0b00011111,
-  0b00111111, 
-  0b00111110, 
-  0b01111100, 
-  0b01110000, 
-  0b11111110, 
-  0b11111111, 
-  0b11111111, 
-  0b00001111, 
-  0b00011110, 
-  0b00011100,
-  0b00111000, 
-  0b00110000, 
-  0b01100000};
+static const uint8_t bmPower[15] PROGMEM = { 0b00011111,
+                                             0b00011111,
+                                             0b00111111, 
+                                             0b00111110, 
+                                             0b01111100, 
+                                             0b01110000, 
+                                             0b11111110, 
+                                             0b11111111, 
+                                             0b11111111, 
+                                             0b00001111, 
+                                             0b00011110, 
+                                             0b00011100,
+                                             0b00111000, 
+                                             0b00110000, 
+                                             0b01100000};
 
 #define DSPL_MAX_BUFF_SIZE 20
 
@@ -1209,7 +1208,7 @@ class HOTGUN : public PID {
         //const       uint16_t    min_fan_speed   = 30;
         //const       uint16_t    max_fan_speed   = max_working_fan;
         //const       uint16_t    max_cool_fan    = 220;
-        const       uint16_t    temp_gun_cold   = 50;                       // The temperature of the cold iron
+        //const       uint16_t    temp_gun_cold   = 50;                       // The temperature of the cold iron
         //const       uint8_t     e_sensor_length = 10;                       // Exponential average length of sensor data
         const       uint32_t    relay_activate  = 1;        // The relay activation delay
 };
@@ -1400,11 +1399,11 @@ int8_t HOTGUN::keepTemp(void) {
 
     switch (mode) {
         case POWER_OFF:
-             if (!isCold()) {                                               // FAN && connected && !cold
-                /*uint16_t*/ fan = map(temp, temp_gun_cold, temp_maxC, max_cool_fan, min_working_fan);
+             if (/*!isCold() &&*/ (temp > (temp_gun_cold + temp_gun_cold_hysteresis))) {                                               // FAN && connected && !cold
+                ///*uint16_t*/ fan = map(temp, temp_gun_cold, temp_maxC, max_cool_fan, min_working_fan);
                 //fan = max_cool_fan;
-                fan = constrain(fan, min_working_fan, max_working_fan);
-                hg_fan.duty(fan);
+                //fan = constrain(fan, min_working_fan, max_working_fan);
+                hg_fan.duty(max_cool_fan); // just start the fun here. Speed will be adjusted in POWER_COOLING mode during next iteration 
                 mode = POWER_COOLING;
             }
             break;
@@ -2331,14 +2330,15 @@ SCREEN* fanSCREEN::menu(void){
         pEnc->reset(fanThr, 0, 1024, 1, 5);
         modeSel = false;
     } else {                                                                // Prepare to adjust the preset value
-        pEnc->reset(0, 0, 1, 1, 1, true);                                       // 0 - fan_min, 1 - fan_max
+        pEnc->reset(0, 0, 1, 1, 1, true);                                   // 0 - fan_min, 1 - fan_max
+        pHG->setFanDuty(0);                                                 // power off fan
         modeSel = true;
     }
     return this;
 }
 
 SCREEN* fanSCREEN::menu_long(void){
-    pHG->switchPower(false); // not needed, just for safety
+    //pHG->switchPower(false);
     pHG->setFanDuty(0); // power off fan
     pCfg->applyFanData(fan_min, fan_max);
     pCfg->saveFanData(fan_min, fan_max);
