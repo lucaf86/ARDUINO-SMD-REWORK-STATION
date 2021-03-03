@@ -6,15 +6,34 @@
 #define MAX6675_READ_PERIOD 250
 #define MAX6675_CONVERSION_RATIO 0.25
 
+/* uncomment to use Software emulated spi interface. Works on any pin.
+ * Default to Hardware SPI on pins CLK=13, MISO=12, CS=any*/
+
+//#define MAX6675_SW_SPI
+
+
+/* uncomment to use 16bit SPI transfer instead of two 8bit transfer */
+#define MAX6675_HW_SPI_TRANSFER16
+
 class MAX6675
 {
-	private:
-		//uint32_t _lastCallTime;
-		int16_t _SSPin;
-		uint16_t _incomingMessage;
-		//float _currentTemp;
-			
-	public:
-		MAX6675 (int16_t SSPin);
-		float readTempC();
+    private:
+        //uint32_t _lastCallTime;
+        int8_t _SSPin;
+#ifdef MAX6675_SW_SPI
+        int8_t _miso, _sclk;
+#endif
+        uint16_t _incomingMessage;
+        //float _currentTemp;
+#ifdef MAX6675_SW_SPI
+        byte spiread(void);
+#endif
+
+    public:
+#ifdef MAX6675_SW_SPI
+        MAX6675 (int8_t SCLKpin, int8_t MISOpin, int8_t SSpin); 
+#else
+        MAX6675 (int8_t SSpin);
+#endif
+        float readTempC();
 };
