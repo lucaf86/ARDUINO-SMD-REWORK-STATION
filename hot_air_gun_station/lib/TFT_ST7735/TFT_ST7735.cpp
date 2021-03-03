@@ -1054,8 +1054,9 @@ void TFT_ST7735::setAddrWindow(int16_t x0, int16_t y0, int16_t x1, int16_t y1)
 {
   spi_begin();
   setWindow(x0, y0, x1, y1);
-  TFT_CS_H;
+  //TFT_CS_H;
   while (!(SPSR & _BV(SPIF)));
+  TFT_CS_H;
   spi_end();
 }
 
@@ -1190,9 +1191,9 @@ void TFT_ST7735::pushColor(uint16_t color, uint16_t len)
 
   TFT_CS_L;
   spiWrite16(color, len);
-  TFT_CS_H;
+  //TFT_CS_H;
   while (!(SPSR & _BV(SPIF)));
-
+  TFT_CS_H;
   spi_end();
 }
 
@@ -1257,9 +1258,10 @@ void TFT_ST7735::pushColors(uint8_t *data, uint16_t len)
       "2:	       \n"	//
     );
   }
-  TFT_CS_H;
+ // TFT_CS_H;
 
   while (!(SPSR & _BV(SPIF)));
+  TFT_CS_H;
   spi_end();
 }
 
@@ -1994,7 +1996,7 @@ int TFT_ST7735::drawString(char *string, int poX, int poY, int font)
         if (padXc>padX) padXc = padX;
         fillRect(poX + sumX - padXc,poY,padXc-sumX,cheight, textbgcolor);
         break;
-    }
+    }	
   }
 #else
 

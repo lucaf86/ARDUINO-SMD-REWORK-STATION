@@ -22,7 +22,7 @@
 
 // ###### EDIT THE PIN NUMBERS IN THE 3 LINES FOLLOWING TO SUIT YOUR SETUP ######
 
-#define TFT_CS  A5  // Chip select control pin
+#define TFT_CS  A5 //SS //A5  // Chip select control pin
 #define TFT_DC  A4 //10  // Data Command control pin
 #define TFT_RST -1  // Reset pin (could connect to Arduino RESET pin)
 
@@ -45,7 +45,7 @@
 #define LOAD_FONT4_W_REDUCED_CHAR //Font 4. Medium 26 pixel high font, only numbers 0-9, letters aA-zZ and symbols %.:-=>
 #define LOAD_FONT4_REWORKED_CHAR_C
 #define LOAD_FONT6  // Font 6. Large 48 pixel font, needs ~2666 bytes in FLASH, only characters 1234567890:-.apm
-//#define LOAD_FONT6_W_REDUCED_CHAR //Font 6. Large 48 pixel font, only numbers 1234567890
+#define LOAD_FONT6_W_REDUCED_CHAR //Font 6. Large 48 pixel font, only numbers 1234567890
 //#define LOAD_FONT7  // Font 7. 7 segment 48 pixel font, needs ~2438 bytes in FLASH, only characters 1234567890:.
 //#define LOAD_FONT8  // Font 8. Large 75 pixel font needs ~3256 bytes in FLASH, only characters 1234567890:-.
 

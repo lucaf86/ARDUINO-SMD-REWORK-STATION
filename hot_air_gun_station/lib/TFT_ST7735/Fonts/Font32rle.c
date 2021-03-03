@@ -6,23 +6,7 @@
 
 #include <avr/pgmspace.h>
 
-#ifndef LOAD_FONT4_W_REDUCED_CHAR
-PROGMEM const unsigned char widtbl_f32[96] =         // character width table
-{
-        5, 8, 8, 19, 14, 21, 17, 6,       // char 32 - 39
-        8, 8, 12, 10, 7, 8, 7, 8,     // char 40 - 47
-        14, 14, 14, 14, 14, 14, 14, 14,     // char 48 - 55
-        14, 14, 7, 7, 14, 9, 14, 13,     // char 56 - 63
-        25, 16, 17, 18, 18, 16, 15, 19,     // char 64 - 71
-        18, 6, 13, 17, 13, 21, 18, 19,      // char 72 - 79
-        16, 19, 17, 16, 14, 18, 15, 23,     // char 80 - 87
-        15, 16, 16, 9, 13, 9, 12, 13,     // char 88 - 95
-        9, 14, 15, 13, 15, 14, 8, 15,     // char 96 - 103
-        15, 6, 6, 12, 6, 22, 15, 15,        // char 104 - 111
-        15, 15, 8, 12, 7, 14, 12, 18,     // char 112 - 119
-        13, 13, 12, 13, 13, 13, 15, 1       // char 120 - 127
-};
-#else
+#ifdef LOAD_FONT4_W_REDUCED_CHAR
 PROGMEM const unsigned char widtbl_f32[96] =         // character width table
 {
         5, 5, 5, 5, 5, 21, 5, 5,          // char 32 - 39          space     % 
@@ -37,6 +21,22 @@ PROGMEM const unsigned char widtbl_f32[96] =         // character width table
         15, 6, 6, 12, 6, 22, 15, 15,        // char 104 - 111      h i j k l m n o
         15, 15, 8, 12, 7, 14, 12, 18,     // char 112 - 119        p q r s t u v w
         13, 13, 12, 5, 5, 5, 5, 5          // char 120 - 127       x y z          
+};
+#else
+PROGMEM const unsigned char widtbl_f32[96] =         // character width table
+{
+        5, 8, 8, 19, 14, 21, 17, 6,       // char 32 - 39          space ! " # $ % & '
+        8, 8, 12, 10, 7, 8, 7, 8,     // char 40 - 47              ( ) * + , - . / 
+        14, 14, 14, 14, 14, 14, 14, 14,     // char 48 - 55        0 1 2 3 4 5 6 7
+        14, 14, 7, 7, 14, 9, 14, 13,     // char 56 - 63           8 9 : ; < = > ?
+        25, 16, 17, 18, 18, 16, 15, 19,     // char 64 - 71        @ A B C D E F G
+        18, 6, 13, 17, 13, 21, 18, 19,      // char 72 - 79        H I J K L M N O
+        16, 19, 17, 16, 14, 18, 15, 23,     // char 80 - 87        P Q R S T U V W
+        15, 16, 16, 9, 13, 9, 12, 13,     // char 88 - 95          X Y Z [ \ ] ^ _
+        9, 14, 15, 13, 15, 14, 8, 15,     // char 96 - 103         ` a b c d e f g
+        15, 6, 6, 12, 6, 22, 15, 15,        // char 104 - 111      h i j k l m n o
+        15, 15, 8, 12, 7, 14, 12, 18,     // char 112 - 119        p q r s t u v w
+        13, 13, 12, 13, 13, 13, 15, 5       // char 120 - 127      x y z { | } ~ ⌂
 };
 #endif
 // Row format, MSB left
@@ -388,6 +388,7 @@ PROGMEM const unsigned char chr_f32_42[] =
 };
 
 #ifdef LOAD_FONT4_REWORKED_CHAR_C
+//width 18
 PROGMEM const unsigned char chr_f32_43[] = 
 {
 0x17, 0x86, 0x08, 0x8A, 0x05, 0x83, 0x04, 0x83, 
