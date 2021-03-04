@@ -1,7 +1,7 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 1.4a
- * Released Dec 19, 2020
+ * Version 2.0
+ * Released Mar 03, 2021
  */
 
 f//toto: thermocouple error check should work also when not ON. Keep temp must avoid resetting back to another state after an abort
