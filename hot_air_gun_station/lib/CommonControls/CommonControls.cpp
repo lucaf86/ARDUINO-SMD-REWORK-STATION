@@ -130,11 +130,15 @@ void BUTTON::init(bool enablePullUp) {
     } 
 }
 
-BUTTON::BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms) {
+BUTTON::BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms, uint16_t tick_to, uint16_t short_to, uint8_t bounce_t) {
     pt = tick_time = 0;
     button_pin = ButtonPIN;
     over_press = timeout_ms;
+    tick_timeout = tick_to;
+    shortPress = short_to;
+    bounce = bounce_t;
 }
+
 
 void BUTTON::changeINTR(void) {                     // Interrupt function, called when the button status changed
     bool keyUp = digitalRead(button_pin);
@@ -216,9 +220,11 @@ bool SWITCH::status(void) {
 }
 
 //------------------------------------------ class ENCODER ------------------------------------------------------
-ENCODER::ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos) {
+ENCODER::ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos, uint16_t fastTimeout, uint16_t overPress ) {
     pt = 0; m_pin = aPIN; s_pin = bPIN; pos = initPos;
     min_pos = -32767; max_pos = 32766; ch_b = false; increment = 1;
+    fast_timeout = fastTimeout;
+    over_press = overPress;
     changed = 0;
     is_looped = false;
 }

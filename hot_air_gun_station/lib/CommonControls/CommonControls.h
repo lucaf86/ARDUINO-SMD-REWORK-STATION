@@ -45,7 +45,7 @@ class BL {
 //------------------------------------------ class BUTTON ------------------------------------------------------
 class BUTTON {
     public:
-        BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms = 3000);
+        BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms = 3000, uint16_t tick_to = 200, uint16_t short_to = 900, uint8_t bounce_t = 50);
         void        init(bool enablePullUp = true);
         void        setTimeout(uint16_t to = 3000)  { over_press = to; }
         uint8_t     intButtonStatus(void)                     { uint8_t m = mode; mode = 0; return m; }
@@ -58,9 +58,9 @@ class BUTTON {
         uint16_t    over_press;                     // Maximum time in ms the button can be pressed
         volatile uint8_t    mode;                   // The button mode: 0 - not pressed, 1 - pressed, 2 - long pressed
         volatile uint32_t   pt;                     // Time in ms when the button was pressed (press time)
-        const uint16_t      tick_timeout = 200;     // Period of button tick, while the button is pressed 
-        const uint16_t      shortPress  = 900;      // If the button was pressed less that this timeout, we assume the short button press
-        const uint8_t       bounce      = 50;       // Bouncing timeout (ms)
+        uint16_t      tick_timeout ;     // Period of button tick, while the button is pressed 
+        uint16_t      shortPress;      // If the button was pressed less that this timeout, we assume the short button press
+        uint8_t       bounce;       // Bouncing timeout (ms)
 };
 
 //------------------------------------------ class SWITCH ------------------------------------------------------
@@ -81,7 +81,7 @@ class SWITCH {
 //------------------------------------------ class ENCODER ------------------------------------------------------
 class ENCODER {
     public:
-        ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0);
+        ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0, uint16_t fastTimeout = 300, uint16_t overPress = 1000 );
         void        init(bool enablePullUp = true);
         void        set_increment(uint8_t inc)      { increment = inc; }
         uint8_t     get_increment(void)             { return increment; }
@@ -99,8 +99,8 @@ class ENCODER {
         volatile uint32_t   changed;                // Time in ms when the value was changed
         volatile bool       ch_b;
         volatile int16_t    pos;                    // Encoder current position
-        const uint16_t      fast_timeout    = 300;  // Time in ms to change encoder quickly
-        const uint16_t      over_press      = 1000;
+        uint16_t    fast_timeout;  // Time in ms to change encoder quickly
+        uint16_t    over_press;
 };
 
 #endif
