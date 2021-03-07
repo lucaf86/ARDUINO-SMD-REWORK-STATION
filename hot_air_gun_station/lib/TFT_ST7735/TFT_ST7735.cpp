@@ -1676,7 +1676,7 @@ size_t TFT_ST7735::write(uint8_t uniCode)
 ** Function name:           drawChar
 ** Description:             draw a unicode onto the screen
 ***************************************************************************************/
-int TFT_ST7735::drawChar(unsigned int uniCode, int x, int y, int font)
+int16_t TFT_ST7735::drawChar(unsigned int uniCode, int x, int y, int font)
 {
 
   if (font==1)
@@ -1915,7 +1915,7 @@ int TFT_ST7735::drawChar(unsigned int uniCode, int x, int y, int font)
 ** Function name:           drawString
 ** Description :            draw string with padding if it is defined
 ***************************************************************************************/
-int TFT_ST7735::drawString(char *string, int poX, int poY, int font)
+int16_t TFT_ST7735::drawString(char *string, int poX, int poY, int font)
 {
   int16_t sumX = 0;
   uint8_t padding = 1;
@@ -2031,7 +2031,7 @@ return sumX;
 ** Function name:           drawCentreString
 ** Descriptions:            draw string centred on dX
 ***************************************************************************************/
-int TFT_ST7735::drawCentreString(char *string, int dX, int poY, int font)
+int16_t TFT_ST7735::drawCentreString(char *string, int dX, int poY, int font)
 {
   byte tempdatum = textdatum;
   int sumX = 0;
@@ -2045,7 +2045,7 @@ int TFT_ST7735::drawCentreString(char *string, int dX, int poY, int font)
 ** Function name:           drawRightString
 ** Descriptions:            draw string right justified to dX
 ***************************************************************************************/
-int TFT_ST7735::drawRightString(char *string, int dX, int poY, int font)
+int16_t TFT_ST7735::drawRightString(char *string, int dX, int poY, int font)
 {
   byte tempdatum = textdatum;
   int sumX = 0;
@@ -2059,7 +2059,7 @@ int TFT_ST7735::drawRightString(char *string, int dX, int poY, int font)
 ** Function name:           drawNumber
 ** Description:             draw a long integer
 ***************************************************************************************/
-int TFT_ST7735::drawNumber(long long_num, int poX, int poY, int font)
+int16_t TFT_ST7735::drawNumber(long long_num, int poX, int poY, int font)
 {
   char str[12];
   ltoa(long_num, str, 10);
@@ -2072,7 +2072,7 @@ int TFT_ST7735::drawNumber(long long_num, int poX, int poY, int font)
 ***************************************************************************************/
 // Adapted to assemble and print a string, this permits alignment relative to a datum
 // looks complicated but much more compact and actually faster than using print class
-int TFT_ST7735::drawFloat(float floatNumber, int dp, int poX, int poY, int font)
+int16_t TFT_ST7735::drawFloat(float floatNumber, int dp, int poX, int poY, int font)
 {
   char str[14];               // Array to contain decimal string
   uint8_t ptr = 0;            // Initialise pointer for array

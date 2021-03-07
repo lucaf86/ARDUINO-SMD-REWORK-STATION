@@ -382,12 +382,8 @@ uint8_t HOTGUN_CFG::fanPreset(void) {
 }
 
 uint16_t HOTGUN_CFG::tempInternal(uint16_t t) {                             // temperature in °C
-
-    uint16_t temp = t;
     t = constrain(t, min_temp, max_temp);
-
     return t;
-
 }
 
 // Thanslate temperature from internal units to the human readable value (Celsius or Fahrenheit)
