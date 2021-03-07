@@ -1996,7 +1996,7 @@ int TFT_ST7735::drawString(char *string, int poX, int poY, int font)
         if (padXc>padX) padXc = padX;
         fillRect(poX + sumX - padXc,poY,padXc-sumX,cheight, textbgcolor);
         break;
-    }	
+    }
   }
 #else
 

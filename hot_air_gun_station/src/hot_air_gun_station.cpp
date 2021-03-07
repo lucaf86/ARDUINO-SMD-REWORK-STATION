@@ -1,22 +1,23 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 2.2
+ * Version 2.3
  * Released Dec 19, 2020
  */
 
-//toto: thermocouple error check should work also when not ON. Keep temp must avoid resetting back to another state after an abort
+//toto: thermocouple error check should work also when not ON. OK done! but on startup it reads 0 untill the heater is switched on. Not sure why
+//todo: Keep temp must avoid resetting back to another state after an abort
 //todo: draw current temp with different color if near, below, higher that set temp
-//todo: ADC in free running mode to continuosly pool fan current, and check against threshold during on state of the gun to prevent damages
 //todo: evaluate if possile to join fanTune and PID cfg menu in one
 //todo: if possible try to avoid AC synch error on power off 
 //todo: use defines for the colors used to higlight the selection ond/or thr editable value (in fan and pid cfg menu or in main/work screen)
-//todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed alway rewrited in eeprom ow
+//todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed alway rewrited in eeprom now
 //todo: add watchdog
 //todo: when exit from fan menu display save menu instead the pid menu (the fisrt in the init of cfg screen )
+//todo: remove fan_speed_raw global variable
+//todo: make editable the min fan cooling speed
 
 //todo/to test: tune Encoder Time in ms to change encoder quickly (see fast_timeoutn library) 
-
-//OK seems good //to test: new histoy class with variable input buffer
+//              todo: still not ok, try to ignore fast move and set 1 increment in any case
 
 #include <avr/io.h>
 #include <avr/interrupt.h>
@@ -44,9 +45,11 @@
 #define SCREEN_HEIGHT            ST7735_TFTWIDTH //128;                                          //  display height, in pixels
 #define LCD_BACKGROUND_COLOR     TFT_BLACK // 0x5AEB // grey color code
 #define LCD_TEXT_COLOR           TFT_WHITE
+#define TFT_TEXT_HIGHLIGHT_COLOR TFT_GREEN
 #define LCD_LINE_COLOR           TFT_LIGHTGREY
 #define LCD_DEFAULT_FONT         4
 #define LCD_SMALL_FONT           LCD_DEFAULT_FONT
+#define LCD_MENU_FONT            LCD_DEFAULT_FONT
 #define LCD_BIG_FONT             6
 #define LCD_STATUS_OFFSET        4
 #define X_PIXEL_OFFSET          10
@@ -94,13 +97,15 @@ const char failText[] = {"= FAILED ="};
 
 #ifdef DISABLE_AC_CHECK
   #define TC_ERROR_TOLLERANCE 999999
+  #define FAN_ERROR_TOLLERANCE 999999
 #else
-  #define TC_ERROR_TOLLERANCE 5     // maximum number of consecutive temperature error reading allowed 
+  #define TC_ERROR_TOLLERANCE 5     // maximum number of consecutive temperature error reading allowed
+  #define FAN_ERROR_TOLLERANCE 5
 #endif
 
 MAX6675 thermocouple(MAXCS);
 
-uint16_t    fan_speed_raw;
+uint8_t    fan_speed_raw;
 
 /* Arduino Software reset function */
 void(* resetFunc) (void) = 0; //declare arduino software reset function @ address 0
@@ -731,7 +736,7 @@ void DSPL::tSet(uint16_t t, bool isActive) {
     //print(buff);
     uint16_t color = LCD_TEXT_COLOR;
     if(isActive) {
-        color = TFT_GREEN;
+        color = TFT_TEXT_HIGHLIGHT_COLOR;
         TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
     }
     uint8_t strWidth = TFT_ST7735::textWidth(buff, LCD_SMALL_FONT);
@@ -743,23 +748,14 @@ void DSPL::tSet(uint16_t t, bool isActive) {
 }
 
 void DSPL::tCurr(uint16_t t) {
-    uint8_t font = LCD_BIG_FONT;
-    uint8_t yPos = SCREEN_HEIGHT/2 + 4 - TFT_ST7735::fontHeight(font)/2; 
+    uint8_t yPos = SCREEN_HEIGHT/2 + 4 - TFT_ST7735::fontHeight(LCD_BIG_FONT)/2; 
     if (t < 1000) {
         snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", t);
     } else {
-        //print(F("xxx"));
-        snprintf(buff, DSPL_MAX_BUFF_SIZE, "999"); // font 6 has only numbers! print all 9 to indicate e
-        //return;
+        snprintf(buff, DSPL_MAX_BUFF_SIZE, "999"); // font 6 has only numbers! print all 9 to indicate error
     }
-/*    if (isCalibration) {
-        font = LCD_SMALL_FONT;
-        yPos -= 2;
-    }
-*/    
-    TFT_textPadding(TFT_ST7735::textWidth("000", font));
-    //TFT_print(buff, SCREEN_WIDTH/2 - 28, yPos, font);
-    TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, yPos, font);
+    TFT_textPadding(TFT_ST7735::textWidth("000", LCD_BIG_FONT));
+    TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, yPos, LCD_BIG_FONT);
     TFT_resetTextPadding();
 }
 
@@ -793,7 +789,7 @@ void DSPL::fanSpeed(uint8_t s, bool isActive) {
     snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d%c", s, '%');
     uint16_t color = LCD_TEXT_COLOR;
     if (isActive) {
-        color = TFT_GREEN;
+        color = TFT_TEXT_HIGHLIGHT_COLOR;
         TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
     }
 
@@ -823,57 +819,22 @@ void DSPL::appliedPower(uint8_t p, bool show_zero) {
     TFT_print(buff,X_PIXEL(7), SCREEN_HEIGHT/2 - 1, LCD_SMALL_FONT);
     TFT_resetTextPadding();
 }
-#define LCD_MENU_FONT    4
+
 void DSPL::setupMode(byte mode) {
     char menu[6][10] = {"PID", "fan", "save", "exit", "reset cfg"};
     clear();
-    //TFT_ST7735::drawString("menu >",X_PIXEL(8), (SCREEN_HEIGHT-24)/3-10, LCD_MENU_FONT);
-    //print(F("Setup"));
-    //setCharCursor(1,1);
-    //TFT_ST7735::setTextFont(LCD_MENU_FONT);
-    
-   // TFT_ST7735::setCursor(X_PIXEL(10), (SCREEN_HEIGHT-textHeight) / 2);
-    TFT_centrePrint(menu[mode], /*X_PIXEL(16)*/ SCREEN_WIDTH/2 -1, (SCREEN_HEIGHT/2) - 1 - textHeight/2, LCD_MENU_FONT);
-    //print(menu[mode]);
-    /*
-    switch (mode) {
-        case 0:                                                             // tip calibrate
-            print(F("calibrate"));
-            break;
-        case 1:                                                             // tune
-            print(F("tune"));
-            break;
-        case 2:
-            print(F(("fan")));
-            break;
-        case 3:                                                             // save
-            print(F("save"));
-            break;
-        case 4:                                                             // cancel
-            print(F("cancel"));
-            break;
-        case 5:                                                             // set defaults
-            print(F("reset config"));
-            break;
-        default:
-            break;
-    }*/
-    //TFT_ST7735::setTextFont(font);
+    TFT_centrePrint(menu[mode], SCREEN_WIDTH/2 -1, (SCREEN_HEIGHT/2) - 1 - textHeight/2, LCD_MENU_FONT);
 }
-//#define LCD_STATUS_PADDING    40
+
 //const char statusMsg[2][4] = {"on","off"};
 void DSPL::msgON(uint16_t color) {
-    //setCharCursor(10, 0);
-    //print(F("    on"));
     TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
-//  TFT_print("on", SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_rightPrint("on", SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
 
 void DSPL::msgOFF(uint16_t color) {
     TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
-//  TFT_print("off",SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_rightPrint("off",SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
@@ -894,11 +855,6 @@ void DSPL::msgFail(void) {
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
 }
 
-/*void DSPL::msgTune(void) {
-    setCharCursor(0, 0);
-//tmp disable    print(F("Tune"));
-}*/
-
 void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_max, uint16_t fan_speed_raw)  {
     uint16_t max_color = LCD_TEXT_COLOR;
     TFT_print("Fan Tune",X_PIXEL(0), Y_PIXEL(0), LCD_DEFAULT_FONT);
@@ -909,39 +865,37 @@ void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_m
     {
         // prepare text strings, will be kept on screen when in edit mode
         snprintf(buff, DSPL_MAX_BUFF_SIZE, "min: ");
-        TFT_print(buff, X_PIXEL(18), Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
+        TFT_print(buff, X_PIXEL(18), Y_PIXEL(textHeight + 4), LCD_DEFAULT_FONT);
         snprintf(buff, DSPL_MAX_BUFF_SIZE, "max: ");
-        TFT_print(buff, X_PIXEL(18), Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+        TFT_print(buff, X_PIXEL(18), Y_PIXEL(textHeight * 2 + 4), LCD_DEFAULT_FONT);
         if (0 == sel){
-            TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
-            TFT_print("   ", X_PIXEL(0), Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+            TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight + 4), LCD_DEFAULT_FONT);
+            TFT_print("   ", X_PIXEL(0), Y_PIXEL(textHeight * 2 + 4 + 0), LCD_DEFAULT_FONT);
         }
         else {
-            TFT_print("   ", X_PIXEL(0), Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
-            TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
+            TFT_print("   ", X_PIXEL(0), Y_PIXEL(textHeight + 4), LCD_DEFAULT_FONT);
+            TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight * 2 + 4), LCD_DEFAULT_FONT);
         }
     }
     // value edit mode, higlight the editable text 
     else {
       if (0 == sel) {
-        TFT_ST7735::setTextColor(TFT_GREEN, LCD_BACKGROUND_COLOR);
+        TFT_ST7735::setTextColor(TFT_TEXT_HIGHLIGHT_COLOR, LCD_BACKGROUND_COLOR);
         //snprintf(&buff[5], DSPL_MAX_BUFF_SIZE, "%4d", f_min);
       }
       else {
-        max_color = TFT_GREEN;
+        max_color = TFT_TEXT_HIGHLIGHT_COLOR;
         //snprintf(&buff1[5], DSPL_MAX_BUFF_SIZE, "%4d", f_max);
       }
     }
     
-    TFT_textPadding(TFT_ST7735::textWidth("1000", LCD_DEFAULT_FONT)/*14*4*/);
+    TFT_textPadding(TFT_ST7735::textWidth("1000", LCD_DEFAULT_FONT));
     snprintf(buff, DSPL_MAX_BUFF_SIZE, "%4d", f_min);
-    TFT_rightPrint(buff, SCREEN_WIDTH - X_PIXEL_OFFSET - 5, Y_PIXEL(textHeight + 4 /*+ 4*/), LCD_DEFAULT_FONT);
-    //TFT_print(buff, X_PIXEL(18), Y_PIXEL(FONT_HEIGHT + 4), LCD_DEFAULT_FONT);
+    TFT_rightPrint(buff, SCREEN_WIDTH - X_PIXEL_OFFSET - 5, Y_PIXEL(textHeight + 4), LCD_DEFAULT_FONT);
     TFT_ST7735::setTextColor(max_color, LCD_BACKGROUND_COLOR);
     
     snprintf(buff, DSPL_MAX_BUFF_SIZE, "%4d", f_max);
-    TFT_rightPrint(buff, SCREEN_WIDTH - X_PIXEL_OFFSET - 5, Y_PIXEL(textHeight * 2 + 4 + 0/*8*/), LCD_DEFAULT_FONT);
-    //TFT_print(buff1, X_PIXEL(18), Y_PIXEL(FONT_HEIGHT * 2 + 4), LCD_DEFAULT_FONT);
+    TFT_rightPrint(buff, SCREEN_WIDTH - X_PIXEL_OFFSET - 5, Y_PIXEL(textHeight * 2 + 4), LCD_DEFAULT_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
     TFT_resetTextPadding();
     // draw fan icon
@@ -952,20 +906,15 @@ void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_m
     // clear extra digit
     TFT_ST7735::fillRect(X_PIXEL(FAN_BITMAP_X_OFFSET + 16 + FAN_BM_WIDTH/*icon pixel*/ + 16/*offset*/), SCREEN_HEIGHT - 1 - Y_PIXEL_OFFSET - textHeight, padding, textHeight-7, LCD_BACKGROUND_COLOR);
     TFT_rightPrint(buff, X_PIXEL(FAN_BITMAP_X_OFFSET + 16 + FAN_BM_WIDTH/*icon pixel*/ + 16/*offset*/ + maxStringWidth), SCREEN_HEIGHT - 1 - Y_PIXEL_OFFSET - textHeight, LCD_DEFAULT_FONT);
-    //TFT_printNumber(fan_speed_raw, X_PIXEL(FAN_BITMAP_X_OFFSET + FAN_BM_WIDTH + 32), SCREEN_HEIGHT - Y_PIXEL_OFFSET - FONT_HEIGHT, LCD_DEFAULT_FONT);
 }
+
 void DSPL::msgPidTune(uint8_t mode, uint16_t kp, uint16_t ki, uint16_t kd, uint8_t kSel)
 {
-
-#if 1
    /** NOTE: kSel value is in range 1-3 only when (mode == 0), otherwise it's equal to the selected pid coefficient value **/
     
     uint16_t color[3] = {LCD_TEXT_COLOR, LCD_TEXT_COLOR, LCD_TEXT_COLOR};
     TFT_print("PID Tune",X_PIXEL(0), Y_PIXEL(0), LCD_DEFAULT_FONT);
-  /*  Serial.print("mode ");
-    Serial.println(mode);
-    Serial.print("kSel ");
-    Serial.println(kSel);*/
+
     // fisrt time call will have mode = 0 so the selection arrow will be initialized!
     // selection mode, all text with same color, just set the strings and the arrow to the correct line
     if (0 == mode)
@@ -987,7 +936,7 @@ void DSPL::msgPidTune(uint8_t mode, uint16_t kp, uint16_t ki, uint16_t kd, uint8
         TFT_print(">", X_PIXEL(0), Y_PIXEL(textHeight * kSel + 4), LCD_DEFAULT_FONT);
     }
     else {  // value edit mode, higlight the editable text 
-        color[mode - 1] = TFT_GREEN;
+        color[mode - 1] = TFT_TEXT_HIGHLIGHT_COLOR;
     }
 
     TFT_textPadding(TFT_ST7735::textWidth("10000", LCD_DEFAULT_FONT));
@@ -1006,7 +955,6 @@ void DSPL::msgPidTune(uint8_t mode, uint16_t kp, uint16_t ki, uint16_t kd, uint8
     
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
     TFT_resetTextPadding();
-#endif
 }
 
 void DSPL::message(const char *msg, const char *msg1) {
@@ -1024,8 +972,8 @@ void DSPL::message(const char *msg, const char *msg1) {
     buff1[0] = '\0';
   }
 }
+
 //------------------------------------------ class HISTORY ----------------------------------------------------
-//#define H_LENGTH 16 //8 //16 /* must be greater that 3! */
 class HISTORY {
     public:
         HISTORY(uint8_t h_len):queue(new uint16_t[h_len])                   { hLen = h_len; len = 0; index = 0; }
@@ -1035,6 +983,7 @@ class HISTORY {
         void     put(uint16_t item);                                        // Put new entry to the history
         uint16_t average(void);                                             // calculate the average value
         float    dispersion(void);                                          // calculate the math dispersion
+        ~HISTORY()                                                          { delete [] queue; }  // destructor, free memory
     private:
         uint8_t hLen;                                                       // The queue buffer len
         volatile uint16_t *queue;
@@ -1211,13 +1160,15 @@ class FastPWM_D9 {
         void init(void);
         void duty(uint8_t d)                        { OCR1A = d; }
         uint8_t   fanSpeed(void)                    { return OCR1A; }
-        int8_t    fanCurrent(void)                  { bitClear(ADCSRA, ADEN); // disable ADC while reading result conversion
-                                                      uint8_t a = ADCH; // read 8bit adc High register. Low register doesn't matter with ADLAR set
-                                                      ADCSRA |= (1 << ADEN);  // re-enable ADC
-                                                      ADCSRA |= (1 << ADSC);  // re-start ADC measurements
-                                                      return a; 
+        uint8_t   fanCurrent(void)                  { //bitClear(ADCSRA, ADEN); // disable ADC while reading result conversion
+                                                      while (bit_is_set(ADCSRA, ADSC)) { } // assert the end of measurement
+                                                      return ADCH; // read 8bit adc High register. Low register doesn't matter with ADLAR set
+                                                      
+                                                      //ADCSRA |= (1 << ADEN);  // re-enable ADC
+                                                      //ADCSRA |= (1 << ADSC);  // re-start ADC measurements
+                                                      //return a; 
                                                     }
-        void        fanAdcStart(void)               { /*bitSet(ADCSRA, ADSC);*/ }
+        void        fanAdcStart(void)               { bitSet(ADCSRA, ADSC); }
 };
 
 void FastPWM_D9::init(void) {
@@ -1242,12 +1193,12 @@ void FastPWM_D9::init(void) {
     //ADCSRA |= (1 << ADPS2);                     // 16 prescaler for 76.9 KHz
 
     
-    ADCSRA |= (1 << ADATE) | (1 << ADEN); // enable auto trigger, enable ADC
+    //ADCSRA |= (1 << ADATE) | (1 << ADEN); // enable auto trigger, enable ADC
     //ADCSRA |= (1 << ADIE);  // enable interrupts when measurement complete
-    //ADCSRA |= (1 << ADEN);  // enable ADC
-    ADCSRA |= (1 << ADSC);  // start ADC measurements
+    ADCSRA |= (1 << ADEN);  // enable ADC
+    //ADCSRA |= (1 << ADSC);  // start ADC measurements
     //bitSet(ADCSRA, ADSC); // start ADC measurements
-    fanAdcStart();
+    //fanAdcStart();
     
     /* Timer setup */
     noInterrupts();
@@ -1276,7 +1227,7 @@ class HOTGUN : public PID {
         uint16_t    getTemp(void)                                           { return temp_set; }
         uint16_t    getCurrTemp(void)                                       { return h_temp.last(); }
         uint16_t    tempAverage(void)                                       { return h_temp.average(); }
-        //void        fillTempQueue(uint16_t t)                               { h_temp.put(t); }
+        void        fillTempQueue(uint16_t t)                               { h_temp.put(t); }
         uint8_t     powerAverage(void)                                      { return h_power.average(); }
         uint8_t     appliedPower(void)                                      { return actual_power; }
         void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_working_fan); } //set fan speed value but not update PWM register
@@ -1285,7 +1236,7 @@ class HOTGUN : public PID {
         void        setFanCurrentThreshold(uint8_t minTh, uint8_t maxTh)    { minFanTh = minTh; maxFanTh = maxTh; }
         uint8_t     getFanCurrentMinThreshold(void)                         { return minFanTh; }
         uint8_t     getFanCurrentMaxThreshold(void)                         { return maxFanTh; }
-        uint16_t    getFanCurrent(void)                                     { return hg_fan.fanCurrent(); }                                
+        uint8_t     getFanCurrent(void)                                     { return hg_fan.fanCurrent(); }                                
         uint8_t     presetFanPcnt(void);
         void        fanAdcStart(void)                                       { return hg_fan.fanAdcStart(); }
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
@@ -1465,11 +1416,13 @@ void HOTGUN::switchPower(bool On) {
 }
 
 uint8_t HOTGUN::readTemp(void) {
+    fanAdcStart(); // start adc measurments here. Conversion will take place durin temperature reading from MAX6675
     int16_t temp = (int16_t)(thermocouple.readTempC());
     static uint8_t thermocoupleErrorCnt = 0;
+    static uint8_t fanCurrentErrorCnt = 0;
     
     //Serial.println(temp);
-    if ((/*MAX6675_THERMOCOUPLE_OPEN == temp ||*/ temp <= 0) && isOn()) { // MAX6675_THERMOCOUPLE_OPEN is -1 so checking for <= includes open connection error!
+    if ((/*MAX6675_THERMOCOUPLE_OPEN == temp ||*/ temp < 0) || (isOn() && temp == 0)) { // MAX6675_THERMOCOUPLE_OPEN is -1 so checking for <= includes open connection error!
         temp = h_temp.average();
         thermocoupleErrorCnt++;
         //Serial.println("th error");
@@ -1480,21 +1433,31 @@ uint8_t HOTGUN::readTemp(void) {
         //Serial.println("th ok");
     }
 
+    uint8_t fanCurrent = getFanCurrent();
+    if (hg_fan.fanSpeed() && ((fanCurrent < minFanTh) || (fanCurrent > maxFanTh))) { /* Fan is on and sensing current is lower or higher than the threshold */
+        fanCurrentErrorCnt++;
+    }
+    else {
+        fanCurrentErrorCnt = 0; 
+    }
+    
     //e_sensor.update(temp);
 #ifdef EMULATE_TEMP
     temp = emulateTemp();
 #endif
     h_temp.put((uint16_t)temp);
     
-    return thermocoupleErrorCnt;
+    return ((thermocoupleErrorCnt & 0xF) | fanCurrentErrorCnt << 4);
 }
 
 // This routine is used to keep the hot air gun temperature near required value
 int8_t HOTGUN::keepTemp(void) {
     long p = 0;
     uint8_t errorTc;
+    uint8_t errorFan;
     errorTc = readTemp();
-
+    errorFan = errorTc >> 4;
+    errorTc = errorTc & 0xF;
 
     //fan_speed_sens = analogRead(sen_pin);                                   // Check the hot air fan speed
     //fan_speed_raw = analogRead(sen_pin);//fan_speed_sens;                                         // Check the hot air fan speed
@@ -1504,19 +1467,26 @@ int8_t HOTGUN::keepTemp(void) {
     //uint16_t temp = e_sensor.read();                                      // Average value of the hot air gun temperature
     //h_temp.put(temp);
 
-    uint8_t fanCurrent = hg_fan.fanSpeed();
-    if(isOn() &&                                                                    /* Heater is ON */ 
+    if(/* isOn() && */                                                                    /* Heater is ON */ 
        ((errorTc > TC_ERROR_TOLLERANCE) // ||                                          /* MAX6675 reading error */
        //(hg_fan.fanSpeed() && ((fanCurrent < minFanTh) || (fanCurrent > maxFanTh))) /* Fan sensing current is lower or higher tha the threshold */
        ))
     {
-        // In case of errors in temperature reading or Fan feedback, shutdown immediately
+        // In case of errors in temperature reading shutdown immediately
         // but leave the fan spinning at max speed for safety and cool down the heater 
         shutdown();
         hg_fan.duty(max_working_fan);
         return -1;
     }
+    else if (errorFan > FAN_ERROR_TOLLERANCE) {
+        // In case of errors on Fan feedback shutdown immediately
+        // but leave the fan spinning at max speed for safety and cool down the heater
+        shutdown();
+        hg_fan.duty(max_working_fan);
+        return -2;
+    }
 
+   // hg_fan.fanAdcStart(); // start adc conversion for next run
     
     uint16_t temp = getCurrTemp();
     uint8_t fan;
@@ -2228,7 +2198,7 @@ void rotEncChange(void) {
 
 void setup() {
   //Serial.begin(115200);
-    uint16_t fan_current_min, fan_current_max;
+    uint8_t fan_current_min, fan_current_max;
     boolean cfgLoad;
     disp.init();
     
@@ -2321,7 +2291,7 @@ void setup() {
                delay(500);
         }
         //else {
-        //   hg.fillTempQueue((uint16_t)readTemp);
+           hg.fillTempQueue((uint16_t)readTemp);
         //}
     //}
 #endif
@@ -2333,16 +2303,16 @@ void setup() {
     // adc conversion ready due to delay()
     //fan_current_max = ADC; //ADCL; // need to read first the LOW value //analogRead(FAN_GUN_SENS_PIN);
     //fan_current_max |= ADCH << 8;
-    fan_current_max = hg.getFanCurrent();
     hg.fanAdcStart();
-    bitSet(ADCSRA, ADSC); //start adc conversion
+    fan_current_max = hg.getFanCurrent();
+    //bitSet(ADCSRA, ADSC); //start adc conversion
     hg.setFanDuty(min_working_fan);
     delay(3000);
     // adc conversion ready due to delay()
     //fan_current_min = ADC;//ADCL; // need to read first the LOW value //analogRead(FAN_GUN_SENS_PIN);
     //fan_current_min |= ADCH << 8; //analogRead(FAN_GUN_SENS_PIN);
+    hg.fanAdcStart();
     fan_current_min = hg.getFanCurrent();
-    //hg.fanAdcStart();
     hg.setFanDuty(0);
 
     //cfgLoad = false; //for test only
@@ -2440,7 +2410,13 @@ int8_t hgError;
             nxt = &errScr;
             if (nxt != pCurrentScreen) {
                 pCurrentScreen = nxt;
-                disp.message(failText, "TEMP");
+                if (hgError == -1) {
+                    disp.message(failText, "TEMP");
+                }
+                else
+                {
+                    disp.message(failText, "FAN");
+                }
                 pCurrentScreen->init();
                 reset_encoder = true;
             }
