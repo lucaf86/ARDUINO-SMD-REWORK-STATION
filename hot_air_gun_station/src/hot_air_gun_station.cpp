@@ -61,22 +61,22 @@
 //#define _FONT_HEIGHT           8  
 //#define setCharCursor(x, y) setCursor((x)*_FONT_WIDTH, (y+1)*_FONT_HEIGHT)
 
-#define temp_minC                100            // min configurable temperature setpoint
-#define temp_maxC                450            // Max configurable temperature setpoint
-#define temp_ambC                 25            // Ambient temperature
-#define temp_gun_cold             40            // The temperature to consider the cold iron
-#define temp_gun_cold_hysteresis  20            // delta T applied to temp_gun_cold before switcing fan on again
+#define TEMP_MIN_C                100            // min configurable temperature setpoint
+#define TEMP_MAX_C                450            // Max configurable temperature setpoint
+#define TEMP_AMB_C                 25            // Ambient temperature
+#define TEMP_GUN_COLD             40            // The temperature to consider the cold iron
+#define TEMP_GUN_COLD_HYSTERESIS  20            // delta T applied to temp_gun_cold before switcing fan on again
 //const uint16_t temp_tip[3]  = {200, 300, 400};                     // Temperature reference points for calibration
-#define min_working_fan  114                                       // Minimal possible fan speed in 0-255 step
+#define min_working_fan  114                    // Minimal possible fan speed in 0-255 step
 #define max_working_fan  255
-#define max_cool_fan     240
+#define MAX_COOL_FAN     245
 
-#define PID_KP           638 // 50
-#define PID_KI           196 // 16
-#define PID_KD             1 // 50
+#define PID_KP           638
+#define PID_KI           196
+#define PID_KD             1
 
-#define H_LENGTH_POWER 16  //History queue for pid power calculation /* must be greater that 3! */
-#define H_LENGTH_TEMP 8  //History queue for temperature read accumulation /* must be greater that 3! */
+#define H_LENGTH_POWER 16  // History queue for pid power calculation /* must be greater that 3! */
+#define H_LENGTH_TEMP 8    // History queue for temperature read accumulation /* must be greater that 3! */
 
 #define AC_SYNC_PIN        2                                        // Outlet 220 v synchronization pin. Do not change!
 #define HOT_GUN_PIN        7                                        // Hot gun heater management pin
@@ -335,12 +335,12 @@ class HOTGUN_CFG : public CONFIG {
         //uint16_t minFanSpeedSens;
         //uint16_t maxFanSpeedSens;
         const   uint16_t def_tip[3] = {200, 300, 400};//{55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
-        const   uint16_t min_temp  = temp_minC;
-        const   uint16_t max_temp  = temp_maxC;
+        const   uint16_t min_temp  = TEMP_MIN_C;
+        const   uint16_t max_temp  = TEMP_MAX_C;
         const   uint16_t def_temp  = 190;                                   // Default preset temperature
         const   uint8_t  def_fan   = 225;                                   // Default preset fan speed 0 - 255
-        const   uint16_t ambient_temp = temp_ambC;
-        const   uint16_t ambient_tempC= temp_ambC;
+        const   uint16_t ambient_temp = TEMP_AMB_C;
+        const   uint16_t ambient_tempC=TEMP_AMB_C;
         const   uint16_t def_minFanSpeedSens = 105;
         const   uint16_t def_maxFanSpeedSens = 230;
         const   uint16_t def_pid_kp = PID_KP;
@@ -811,7 +811,7 @@ void DSPL::appliedPower(uint8_t p, bool show_zero) {
     } else {
         snprintf(buff, DSPL_MAX_BUFF_SIZE, "%2d", p);
     }
-    TFT_textPadding(TFT_ST7735::textWidth("00", LCD_SMALL_FONT)/*14*2*/);
+    TFT_textPadding(TFT_ST7735::textWidth("00", LCD_SMALL_FONT));
     TFT_print(buff,X_PIXEL(7), SCREEN_HEIGHT/2 - 1, LCD_SMALL_FONT);
     TFT_resetTextPadding();
 }
@@ -877,11 +877,9 @@ void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_m
     else {
       if (0 == sel) {
         TFT_ST7735::setTextColor(TFT_TEXT_HIGHLIGHT_COLOR, LCD_BACKGROUND_COLOR);
-        //snprintf(&buff[5], DSPL_MAX_BUFF_SIZE, "%4d", f_min);
       }
       else {
         max_color = TFT_TEXT_HIGHLIGHT_COLOR;
-        //snprintf(&buff1[5], DSPL_MAX_BUFF_SIZE, "%4d", f_max);
       }
     }
     
@@ -1273,12 +1271,13 @@ class HOTGUN : public PID {
        // const       uint16_t    int_temp_max    = 900;                      // The raw ADC temp value 900 corresponds to about 400°C
         const       uint8_t     max_fix_power   = 70;
         const       uint8_t     max_power       = 99;
-        const       uint16_t    min_temp  = temp_minC;
-        const       uint16_t    max_temp  = temp_maxC;
+        const       uint16_t    min_temp  = TEMP_MIN_C;
+        const       uint16_t    max_temp  = TEMP_MAX_C;
         //const       uint16_t    min_fan_speed   = 30;
         //const       uint16_t    max_fan_speed   = max_working_fan;
-        //const       uint16_t    max_cool_fan    = 220;
-        //const       uint16_t    temp_gun_cold   = 50;                       // The temperature of the cold iron
+        const       uint8_t    max_cool_fan    = MAX_COOL_FAN;
+        const       uint8_t    temp_gun_cold   = TEMP_GUN_COLD;                       // The temperature of the cold iron
+        const       uint8_t     temp_gun_cold_hysteresis = TEMP_GUN_COLD_HYSTERESIS;
         //const       uint8_t     e_sensor_length = 10;                       // Exponential average length of sensor data
         const       uint32_t    relay_activate  = 1;        // The relay activation delay
 };
@@ -1539,7 +1538,7 @@ int8_t HOTGUN::keepTemp(void) {
                     if (isCold()) {                                         // FAN && connected && cold
                         shutdown();
                     } else {                                                // FAN && connected && !cold
-                        /*uint16_t*/ fan = map(temp, temp_gun_cold, temp_maxC, max_cool_fan, min_working_fan);
+                        /*uint16_t*/ fan = map(temp, temp_gun_cold, max_temp, max_cool_fan, min_working_fan);
                         //fan = max_cool_fan;
                         fan = constrain(fan, min_working_fan, max_working_fan);
                         hg_fan.duty(fan);
@@ -1683,7 +1682,7 @@ void mainSCREEN::init(void) {
     pHG->switchPower(false);
     uint16_t temp_set   = pHG->getTemp();
     uint16_t tempH      = /*pCfg->tempHuman(*/temp_set/*)*/;                        // The preset temperature in the human readable units
-    pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+    pEnc->reset(tempH, TEMP_MIN_C, TEMP_MAX_C, 1, 5);
     used = !pHG->isCold();
     cool_notified = !used;
     if (used) {                                                             // the hot gun was used, we should save new data in EEPROM
@@ -1750,7 +1749,7 @@ SCREEN* mainSCREEN::menu(void) {
     } else {                                                                // Prepare to adjust the preset temperature
         uint16_t temp_set   = pHG->getTemp();
         uint16_t tempH      = /*pCfg->tempHuman(*/temp_set/*)*/;
-        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+        pEnc->reset(tempH, TEMP_MIN_C, TEMP_MAX_C, 1, 5);
         mode_temp = true;
     }
     forceRedraw();
@@ -1856,7 +1855,7 @@ SCREEN* workSCREEN::menu(void) {
     } else {
         uint16_t temp_set   = pHG->getTemp();
         uint16_t tempH      = /*pCfg->tempHuman(*/temp_set/*)*/;
-        pEnc->reset(tempH, temp_minC, temp_maxC, 1, 5);
+        pEnc->reset(tempH, TEMP_MIN_C, TEMP_MAX_C, 1, 5);
         mode_temp = true;
     }
     forceRedraw();
