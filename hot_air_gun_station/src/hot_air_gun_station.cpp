@@ -67,9 +67,9 @@
 #define TEMP_GUN_COLD             40            // The temperature to consider the cold iron
 #define TEMP_GUN_COLD_HYSTERESIS  20            // delta T applied to temp_gun_cold before switcing fan on again
 //const uint16_t temp_tip[3]  = {200, 300, 400};                     // Temperature reference points for calibration
-#define min_working_fan  114                    // Minimal possible fan speed in 0-255 step
-#define max_working_fan  255
-#define MAX_COOL_FAN     245
+#define min_working_fan  45//114                    // Minimal possible fan speed in 0-255 step
+#define max_working_fan  100//255
+#define MAX_COOL_FAN     96//245
 
 #define PID_KP           638
 #define PID_KI           196
@@ -338,7 +338,7 @@ class HOTGUN_CFG : public CONFIG {
         const   uint16_t min_temp  = TEMP_MIN_C;
         const   uint16_t max_temp  = TEMP_MAX_C;
         const   uint16_t def_temp  = 190;                                   // Default preset temperature
-        const   uint8_t  def_fan   = 225;                                   // Default preset fan speed 0 - 255
+        const   uint8_t  def_fan   = 90;//225;                                   // Default preset fan speed 0 - 255
         const   uint16_t ambient_temp = TEMP_AMB_C;
         const   uint16_t ambient_tempC=TEMP_AMB_C;
         const   uint16_t def_minFanSpeedSens = 105;
@@ -1152,8 +1152,8 @@ class FastPWM_D9 {
     public:
         FastPWM_D9()                                { }
         void init(void);
-        void duty(uint8_t d)                        { OCR1A = d; }
-        uint8_t   fanSpeed(void)                    { return OCR1A; }
+        void setDutyPwm(uint8_t d)                  { OCR1A = d; }
+        uint8_t   getFanSpeedPwm(void)              { return OCR1A; }
         uint8_t   fanCurrent(void)                  { //bitClear(ADCSRA, ADEN); // disable ADC while reading result conversion
                                                       while (bit_is_set(ADCSRA, ADSC)) { } // assert the end of measurement
                                                       return ADCH; // read 8bit adc High register. Low register doesn't matter with ADLAR set
@@ -1226,12 +1226,13 @@ class HOTGUN : public PID {
         uint8_t     appliedPower(void)                                      { return actual_power; }
         void        setFanSpeed(uint8_t f)                                  { fan_speed = constrain(f, min_working_fan, max_working_fan); } //set fan speed value but not update PWM register
         uint8_t     getFanSpeed(void)                                       { return fan_speed; }
-        void        setFanDuty(uint8_t d)                                   { hg_fan.duty(d); }
+        void        setFanDuty(uint8_t fanPcnt)                             { hg_fan.setDutyPwm(map(fanPcnt,0,100,0,255)); }
         void        setFanCurrentThreshold(uint8_t minTh, uint8_t maxTh)    { minFanTh = minTh; maxFanTh = maxTh; }
         uint8_t     getFanCurrentMinThreshold(void)                         { return minFanTh; }
         uint8_t     getFanCurrentMaxThreshold(void)                         { return maxFanTh; }
         uint8_t     getFanCurrent(void)                                     { return hg_fan.fanCurrent(); }                                
         uint8_t     presetFanPcnt(void);
+        uint8_t     fanPwmToPcnt(uint8_t fanPwm);
         void        fanAdcStart(void)                                       { return hg_fan.fanAdcStart(); }
         uint16_t    tempDispersion(void)                                    { return h_temp.dispersion(); }
         bool        isCold(void)                                            { return h_temp.average() < temp_gun_cold; }
@@ -1331,7 +1332,7 @@ bool HOTGUN::syncCB(void) {
 void HOTGUN::switchPower(bool On) {
     switch (mode) {
         case POWER_OFF:
-            if (hg_fan.fanSpeed() == 0) {                                   // Not power supplied to the Fan
+            if (hg_fan.getFanSpeedPwm() == 0) {                                   // Not power supplied to the Fan
                 if (On) {                                                    // !FAN && On
                     activateRelay(true);
                     mode = POWER_ON;
@@ -1383,7 +1384,7 @@ void HOTGUN::switchPower(bool On) {
             }
             break;*/
         case POWER_COOLING:
-            if (hg_fan.fanSpeed()) {
+            if (hg_fan.getFanSpeedPwm()) {
                 if (On) {                                                   // FAN && On
                     if (isGunConnected()) {                                 // FAN && On && connected
                         activateRelay(true);
@@ -1429,7 +1430,7 @@ uint8_t HOTGUN::readTemp(void) {
     }
 
     uint8_t fanCurrent = getFanCurrent();
-    if (hg_fan.fanSpeed() && ((fanCurrent < minFanTh) || (fanCurrent > maxFanTh))) { /* Fan is on and sensing current is lower or higher than the threshold */
+    if (hg_fan.getFanSpeedPwm() && ((fanCurrent < minFanTh) || (fanCurrent > maxFanTh))) { /* Fan is on and sensing current is lower or higher than the threshold */
         fanCurrentErrorCnt++;
     }
     else {
@@ -1470,14 +1471,14 @@ int8_t HOTGUN::keepTemp(void) {
         // In case of errors in temperature reading shutdown immediately
         // but leave the fan spinning at max speed for safety and cool down the heater 
         shutdown();
-        hg_fan.duty(max_working_fan);
+        setFanDuty(max_working_fan);
         return -1;
     }
     else if (errorFan > FAN_ERROR_TOLLERANCE) {
         // In case of errors on Fan feedback shutdown immediately
         // but leave the fan spinning at max speed for safety and cool down the heater
         shutdown();
-        hg_fan.duty(max_working_fan);
+        setFanDuty(max_working_fan);
         return -2;
     }
 
@@ -1498,12 +1499,12 @@ int8_t HOTGUN::keepTemp(void) {
                 ///*uint16_t*/ fan = map(temp, temp_gun_cold, temp_maxC, max_cool_fan, min_working_fan);
                 //fan = max_cool_fan;
                 //fan = constrain(fan, min_working_fan, max_working_fan);
-                hg_fan.duty(max_cool_fan); // just start the fun here. Speed will be adjusted in POWER_COOLING mode during next iteration 
+                setFanDuty(max_cool_fan); // just start the fun here. Speed will be adjusted in POWER_COOLING mode during next iteration 
                 mode = POWER_COOLING;
             }
             break;
         case POWER_ON:
-            hg_fan.duty(fan_speed);                                         // Turn on the fan immediately
+            setFanDuty(fan_speed);                                         // Turn on the fan immediately
             if (chill) {
                 if (temp < (temp_set - 5)) {
                     chill = false;
@@ -1528,10 +1529,10 @@ int8_t HOTGUN::keepTemp(void) {
             else {
                 p  = fix_power;
             }
-            hg_fan.duty(fan_speed);
+            setFanDuty(fan_speed);
             break;*/
         case POWER_COOLING:
-            if (hg_fan.fanSpeed() < min_working_fan) {
+            if (fanPwmToPcnt((hg_fan.getFanSpeedPwm())) < min_working_fan) {
                 shutdown();
             } else {
                 if (isGunConnected()) {
@@ -1541,7 +1542,7 @@ int8_t HOTGUN::keepTemp(void) {
                         /*uint16_t*/ fan = map(temp, temp_gun_cold, max_temp, max_cool_fan, min_working_fan);
                         //fan = max_cool_fan;
                         fan = constrain(fan, min_working_fan, max_working_fan);
-                        hg_fan.duty(fan);
+                        setFanDuty(fan);
                     }
                 } else {                                                    // FAN && !connected
                     shutdown();
@@ -1584,7 +1585,7 @@ uint8_t HOTGUN::avgPowerPcnt(void) {
 
 void HOTGUN::shutdown(void) {
     digital_write(gun_pin, LOW);
-    hg_fan.duty(0);
+    hg_fan.setDutyPwm(0);
     mode            = POWER_OFF;
     actual_power    = 0;
     active          = false;
@@ -1598,7 +1599,7 @@ uint16_t HOTGUN::emulateTemp(void) {
 //        ap = fix_power;
     ap = constrain(ap, 0, 100);
     t += map(ap, 0, 100, 0, 30);
-    uint8_t fn = hg_fan.fanSpeed();
+    uint8_t fn = hg_fan.getFanSpeedPwm();
     t -= fn/40 + t/50 + 1;
     if (t < 0) t = 0;
     return t;
@@ -1619,9 +1620,14 @@ void HOTGUN::activateRelay(bool activate) {
 }
 
 uint8_t HOTGUN::presetFanPcnt(void) {
-  uint16_t pcnt = map(fan_speed, 0, max_working_fan, 0, 100);
+    return fan_speed;
+/*  uint16_t pcnt = map(fan_speed, 0, max_working_fan, 0, 100);
   if (pcnt > 100) pcnt = 100;
-  return pcnt;
+  return pcnt;*/
+}
+
+uint8_t HOTGUN::fanPwmToPcnt(uint8_t fanPwm) {
+  return ((fanPwm * 100) / 255);
 }
 
 //------------------------------------------ class SCREEN ------------------------------------------------------
@@ -1744,7 +1750,7 @@ SCREEN* mainSCREEN::show(void) {
 SCREEN* mainSCREEN::menu(void) {
     if (mode_temp) {                                                        // Prepare to adjust the fan speed
         uint8_t fs = pHG->getFanSpeed();
-        pEnc->reset(fs, min_working_fan, 255, 1, 10);
+        pEnc->reset(fs, min_working_fan, 100, 1, 10);
         mode_temp = false;
     } else {                                                                // Prepare to adjust the preset temperature
         uint16_t temp_set   = pHG->getTemp();
@@ -1791,7 +1797,7 @@ class workSCREEN : public SCREEN {
 
 void workSCREEN::init(void) {
     uint8_t fs = pHG->getFanSpeed();
-    pEnc->reset(fs, min_working_fan, 255, 1, 10);
+    pEnc->reset(fs, min_working_fan, 100, 1, 10);
     mode_temp   = false;                                                    // By default adjust the fan speed
     pHG->switchPower(true);
     ready = false;
@@ -1850,7 +1856,7 @@ SCREEN* workSCREEN::show(void) {
 SCREEN* workSCREEN::menu(void) {
     if (mode_temp) {
         uint8_t fs = pHG->getFanSpeed();
-        pEnc->reset(fs, min_working_fan, 255, 1, 10);
+        pEnc->reset(fs, min_working_fan, 100, 1, 10);
         mode_temp = false;
     } else {
         uint16_t temp_set   = pHG->getTemp();
