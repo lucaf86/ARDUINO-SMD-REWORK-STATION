@@ -79,9 +79,55 @@ class SWITCH {
 };
 
 //------------------------------------------ class ENCODER ------------------------------------------------------
+//  Direction values returned by read() method 
+/**
+ \def DIR_NONE
+  read() return value - No complete step/movement
+ */
+#define DIR_NONE  0x00
+/**
+ \def DIR_CW
+ read() return value - Clockwise step/movement
+ */
+#define DIR_CW    0x10
+/**
+ \def DIR_CCW
+ read() return value - Counter-clockwise step/movement
+ */
+#define DIR_CCW   0x20  
+
+// Library options
+/**
+ \def ENABLE_HALF_STEP
+ Set this to 1 to emit codes when the rotary encoder is at 11 as well as 00. 
+ The default is to emit codes only at 00.
+ */
+#define ENABLE_HALF_STEP  0
+
+/**
+ \def ENCODER_LOOKUP_TABLE
+ Set this to 1 to use the lookup table
+ */
+#define ENCODER_LOOKUP_TABLE 1
+
+/**
+ Set the default sampling period for measuring the speed, in milliseconds. This works best as 
+ a whole fraction of 1000 (ie 100, 200, 500, 1000). Longer periods provide some hysteresis 
+ which is useful when the encoder is being turned by hand.
+ */
+#define DEFAULT_PERIOD    500
+
 class ENCODER {
     public:
-        ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0, uint16_t fastTimeout = 300, uint16_t overPress = 1000 );
+    enum class Direction {
+    NOROTATION = 0,
+    CLOCKWISE = 1,
+    COUNTERCLOCKWISE = -1
+  };
+
+   // ----- Constructor -----
+        ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0, uint16_t fastTimeout = 300, uint16_t overPress = 1000, bool reverseDir = false);
+        //ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0, uint16_t fastTimeout = 300, uint16_t overPress = 1000 );
         void        init(bool enablePullUp = true);
         void        set_increment(uint8_t inc)      { increment = inc; }
         uint8_t     get_increment(void)             { return increment; }
@@ -89,6 +135,19 @@ class ENCODER {
         void        reset(int16_t initPos, int16_t low, int16_t upp, uint8_t inc = 1, uint8_t fast_inc = 0, bool looped = false);
         bool        write(int16_t initPos);
         void        changeINTR(void);
+		  // Returns the RPM
+ //       unsigned long getRPM();
+		  /** 
+   * Return the speed of the encoder.
+   *
+   * Calculate the speed (steps per second) for the encoder.
+   * The sampling period is set using the setPeriod() method.
+   * If the encoder is used to enter numbers or scan through menus, the speed 
+   * can be used to accelerate the display (eg, skip larger values for each click).
+   *
+   * \return The speed in clicks per second.
+   */
+  //  inline uint16_t speed(void) { return(_spd); };
     private:
         int32_t     min_pos, max_pos;
         uint8_t     m_pin, s_pin;                     // The pin numbers connected to the main channel and to the socondary channel
@@ -101,6 +160,13 @@ class ENCODER {
         volatile int16_t    pos;                    // Encoder current position
         uint16_t    fast_timeout;  // Time in ms to change encoder quickly
         uint16_t    over_press;
+
+	    volatile uint8_t _state;     // latest state for the encoder
+		// Velocity data
+        volatile uint16_t  _period;  // velocity calculation period
+        volatile uint16_t  _count;   // running count of encoder clicks
+        volatile uint16_t  _spd;     // last calculated speed (no sign) in clicks/second
+        volatile uint32_t  _timeLast;  // last time read
 };
 
 #endif

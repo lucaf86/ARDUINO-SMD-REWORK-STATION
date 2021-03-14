@@ -134,9 +134,9 @@ BUTTON::BUTTON(uint8_t ButtonPIN, unsigned int timeout_ms, uint16_t tick_to, uin
     pt = tick_time = 0;
     button_pin = ButtonPIN;
     over_press = timeout_ms;
-    tick_timeout = tick_to;
-    shortPress = short_to;
-    bounce = bounce_t;
+	tick_timeout = tick_to;
+	shortPress = short_to;
+	bounce = bounce_t;
 }
 
 
@@ -220,14 +220,79 @@ bool SWITCH::status(void) {
 }
 
 //------------------------------------------ class ENCODER ------------------------------------------------------
-ENCODER::ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos, uint16_t fastTimeout, uint16_t overPress ) {
-    pt = 0; m_pin = aPIN; s_pin = bPIN; pos = initPos;
+
+/*
+ * The below state table has, for each state (row), the new state
+ * to set based on the next encoder output. From left to right in,
+ * the table, the encoder outputs are 00, 01, 10, 11, and the value
+ * in that position is the new state to set.
+ */
+#define R_START 0x0
+
+#if ENABLE_HALF_STEP
+// Use the half-step state table (emits a code at 00 and 11)
+#define R_CCW_BEGIN   0x1
+#define R_CW_BEGIN    0x2
+#define R_START_M     0x3
+#define R_CW_BEGIN_M  0x4
+#define R_CCW_BEGIN_M 0x5
+
+const unsigned char ttable[][4] = 
+{
+  // 00                  01              10            11
+  {R_START_M,           R_CW_BEGIN,     R_CCW_BEGIN,  R_START},           // R_START (00)
+  {R_START_M | DIR_CCW, R_START,        R_CCW_BEGIN,  R_START},           // R_CCW_BEGIN
+  {R_START_M | DIR_CW,  R_CW_BEGIN,     R_START,      R_START},           // R_CW_BEGIN
+  {R_START_M,           R_CCW_BEGIN_M,  R_CW_BEGIN_M, R_START},           // R_START_M (11)
+  {R_START_M,           R_START_M,      R_CW_BEGIN_M, R_START | DIR_CW},  // R_CW_BEGIN_M 
+  {R_START_M,           R_CCW_BEGIN_M,  R_START_M,    R_START | DIR_CCW}  // R_CCW_BEGIN_M
+};
+#else
+// Use the full-step state table (emits a code at 00 only)
+#define R_CW_FINAL   0x1
+#define R_CW_BEGIN   0x2
+#define R_CW_NEXT    0x3
+#define R_CCW_BEGIN  0x4
+#define R_CCW_FINAL  0x5
+#define R_CCW_NEXT   0x6
+
+const unsigned char ttable[][4] = 
+{
+  // 00         01           10           11
+  {R_START,    R_CW_BEGIN,  R_CCW_BEGIN, R_START},           // R_START
+  {R_CW_NEXT,  R_START,     R_CW_FINAL,  R_START | DIR_CW},  // R_CW_FINAL
+  {R_CW_NEXT,  R_CW_BEGIN,  R_START,     R_START},           // R_CW_BEGIN
+  {R_CW_NEXT,  R_CW_BEGIN,  R_CW_FINAL,  R_START},           // R_CW_NEXT
+  {R_CCW_NEXT, R_START,     R_CCW_BEGIN, R_START},           // R_CCW_BEGIN
+  {R_CCW_NEXT, R_CCW_FINAL, R_START,     R_START | DIR_CCW}, // R_CCW_FINAL
+  {R_CCW_NEXT, R_CCW_FINAL, R_CCW_BEGIN, R_START}            // R_CCW_NEXT
+};
+#endif
+
+ENCODER::ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos, uint16_t fastTimeout, uint16_t overPress, bool reverseDir) {
+    pt = 0; 
+	if (reverseDir)
+	{
+	    s_pin = aPIN; 
+	    m_pin = bPIN; 		
+	}
+	else {
+	    m_pin = aPIN; 
+	    s_pin = bPIN; 
+	}
+	pos = initPos;
     min_pos = -32767; max_pos = 32766; ch_b = false; increment = 1;
     fast_timeout = fastTimeout;
-    over_press = overPress;
-    changed = 0;
+	over_press = overPress;
+	changed = 0;
     is_looped = false;
-}
+
+    _state=(R_START);
+    _period = (DEFAULT_PERIOD);
+    _count= (0);
+    _spd=(0);
+    _timeLast=(0);
+} // RotaryEncoder()
 
 void ENCODER::init(bool enablePullUp) {
     if (enablePullUp == true)
@@ -258,6 +323,50 @@ void ENCODER::reset(int16_t initPos, int16_t low, int16_t upp, uint8_t inc, uint
     is_looped = looped;
 }
 
+#if ENCODER_LOOKUP_TABLE
+void ENCODER::changeINTR(void) {  
+  // Grab state of input pins, determine new state from the pins 
+  // and state table, and return the emit bits (ie the generated event).
+  uint8_t pinstate = (digitalRead(s_pin) << 1) | digitalRead(m_pin);
+  
+  _state = ttable[_state & 0xf][pinstate]; 
+  
+  // handle the encoder velocity calc
+  if (_state & 0x30) _count++;
+  if (millis() - _timeLast >= _period)
+  {
+    _spd = _count * (1000/_period);
+    _timeLast = millis();
+    _count = 0;
+  }
+   uint8_t inc = 1;//increment;
+   if (_spd > fast_timeout) {
+       inc = fast_increment;
+   }
+   unsigned char direction = _state & 0x30;
+   //Serial.println(pinstate);
+   if (direction != DIR_NONE) {
+	   if (direction == DIR_CW) {
+		   pos += inc;
+	   }
+	   else {
+		   pos -= inc;
+	   }
+     if (pos > max_pos) { 
+        if (is_looped)
+            pos = min_pos;
+        else 
+            pos = max_pos;
+    }
+    if (pos < min_pos) {
+        if (is_looped)
+            pos = max_pos;
+        else
+            pos = min_pos;
+    }
+   }
+}
+#else
 void ENCODER::changeINTR(void) {                    // Interrupt function, called when the channel A of encoder changed
     bool rUp = digitalRead(m_pin);
     unsigned long now_t = millis();
@@ -290,3 +399,4 @@ void ENCODER::changeINTR(void) {                    // Interrupt function, calle
         }
     }
 }
+#endif
