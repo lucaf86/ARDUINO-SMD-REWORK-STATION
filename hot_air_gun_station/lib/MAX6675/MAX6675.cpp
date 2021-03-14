@@ -1,7 +1,7 @@
 #include <MAX6675.h>
 
 #ifdef MAX6675_SW_SPI
-MAX6675::MAX6675(int8_t SCLKpin, int8_t MISOpin, int8_t SSpin)
+MAX6675::MAX6675(int8_t SCLKpin, int8_t SSpin, int8_t MISOpin)
 {
     _SSPin = SSpin;
     _sclk = SCLKpin;
@@ -10,8 +10,7 @@ MAX6675::MAX6675(int8_t SCLKpin, int8_t MISOpin, int8_t SSpin)
     digitalWrite(_SSPin, HIGH);
     pinMode(_sclk, OUTPUT);
     pinMode(_miso, INPUT);
-
-    //_lastCallTime = 0;
+    _lastCallTime = 0;
 }
 #else
 MAX6675::MAX6675(int8_t SSpin)
@@ -20,8 +19,7 @@ MAX6675::MAX6675(int8_t SSpin)
     pinMode(_SSPin, OUTPUT);
     digitalWrite(_SSPin, HIGH);
     SPI.begin();
-
-    //_lastCallTime = 0;
+    _lastCallTime = 0;
 }
 #endif
 
@@ -44,12 +42,13 @@ float MAX6675::readTempC()
 }
 #else
 {
-    //if (millis() - _lastCallTime >= MAX6675_READ_PERIOD)
-    //{
+    if (millis() - _lastCallTime >= MAX6675_READ_PERIOD)
+    {
         //SPI.usingInterrupt(digitalPinToInterrupt(3));  // disable all interrupt (valid input 0-7)
         //SPI.usingInterrupt(digitalPinToInterrupt(2));
         SPI.beginTransaction(MAX6675_Settings);
         digitalWrite(_SSPin, LOW);
+        delayMicroseconds(10); //not sure if needed. Datasheet says that at least 100ns are required before the first clock cycle, after pulling CS low
 #ifdef MAX6675_HW_SPI_TRANSFER16
         _incomingMessage = SPI.transfer16(0x00);
 #else
@@ -61,14 +60,13 @@ float MAX6675::readTempC()
         SPI.endTransaction();
         //SPI.notUsingInterrupt(digitalPinToInterrupt(3)); // restore interrupt
         //SPI.notUsingInterrupt(digitalPinToInterrupt(2)); // restore interrupt
-        //_lastCallTime = millis();
-
+        _lastCallTime = millis();
+        
         if (_incomingMessage & MAX6675_THERMOCOUPLE_OPEN_BIT)
             return MAX6675_THERMOCOUPLE_OPEN;
-        float _currentTemp = (_incomingMessage >> 3) * MAX6675_CONVERSION_RATIO;
-        return _currentTemp;
-    //}
-    //return _currentTemp;
+        _currentTemp = (_incomingMessage >> 3) * MAX6675_CONVERSION_RATIO;
+    }
+    return _currentTemp;
 }
 #endif
 
