@@ -204,7 +204,7 @@ void SWITCH::init(uint32_t on_to, uint32_t off_to) {
 bool SWITCH::status(void) {
     bool sw_on = digitalRead(switch_pin);           // Read the current state of the switch
     uint32_t now_t = millis();
-    if (last_mode != sw_on) {                       // Mode changed ftom last time
+    if (last_mode != sw_on) {                       // Mode changed from last time
         pt = now_t;
         last_mode   = sw_on;
     } else {
@@ -287,11 +287,11 @@ ENCODER::ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos, uint16_t fastTimeo
 	changed = 0;
     is_looped = false;
 
-    _state=(R_START);
-    _period = (DEFAULT_PERIOD);
-    _count= (0);
-    _spd=(0);
-    _timeLast=(0);
+    _state    = R_START;
+    _period   = DEFAULT_PERIOD;
+    _count    = 0;
+    _spd      = 0;
+    _timeLast = 0;
 } // RotaryEncoder()
 
 void ENCODER::init(bool enablePullUp) {
@@ -325,46 +325,49 @@ void ENCODER::reset(int16_t initPos, int16_t low, int16_t upp, uint8_t inc, uint
 
 #if ENCODER_LOOKUP_TABLE
 void ENCODER::changeINTR(void) {  
-  // Grab state of input pins, determine new state from the pins 
-  // and state table, and return the emit bits (ie the generated event).
-  uint8_t pinstate = (digitalRead(s_pin) << 1) | digitalRead(m_pin);
+    // Grab state of input pins, determine new state from the pins 
+    // and state table, and return the emit bits (ie the generated event).
+    uint8_t pinstate = (digitalRead(s_pin) << 1) | digitalRead(m_pin);
   
-  _state = ttable[_state & 0xf][pinstate]; 
+    _state = ttable[_state & 0xf][pinstate]; 
   
-  // handle the encoder velocity calc
-  if (_state & 0x30) _count++;
-  if (millis() - _timeLast >= _period)
-  {
-    _spd = _count * (1000/_period);
-    _timeLast = millis();
-    _count = 0;
-  }
-   uint8_t inc = 1;//increment;
-   if (_spd > fast_timeout) {
-       inc = fast_increment;
-   }
-   unsigned char direction = _state & 0x30;
-   //Serial.println(pinstate);
-   if (direction != DIR_NONE) {
-	   if (direction == DIR_CW) {
-		   pos += inc;
-	   }
-	   else {
-		   pos -= inc;
-	   }
-     if (pos > max_pos) { 
-        if (is_looped)
-            pos = min_pos;
-        else 
-            pos = max_pos;
+    // handle the encoder velocity calc
+    if (_state & 0x30) _count++;
+    if (millis() - _timeLast >= _period)
+    {
+        _spd = _count * (1000/_period);
+        _timeLast = millis();
+        _count = 0;
     }
-    if (pos < min_pos) {
-        if (is_looped)
-            pos = max_pos;
-        else
-            pos = min_pos;
+    uint8_t inc = increment;
+    if (_spd > fast_timeout) {
+        inc = fast_increment;
     }
-   }
+    unsigned char direction = _state & 0x30;
+    if (direction != DIR_NONE) {
+        if (direction == DIR_CW) {
+		    pos += inc;
+	    }
+	    else {
+		    pos -= inc;
+	    }
+        if (pos > max_pos) { 
+            if (is_looped) {
+                pos = min_pos;
+            }
+            else { 
+                pos = max_pos;
+            }
+        }
+        else if (pos < min_pos) {
+            if (is_looped) {
+                pos = max_pos;
+            }
+            else {
+                pos = min_pos;
+            }
+        }
+    }
 }
 #else
 void ENCODER::changeINTR(void) {                    // Interrupt function, called when the channel A of encoder changed
@@ -380,22 +383,22 @@ void ENCODER::changeINTR(void) {                    // Interrupt function, calle
             uint8_t inc = increment;
             if ((now_t - pt) < over_press) {
                 if ((now_t - changed) < fast_timeout) inc = fast_increment;
-                    changed = now_t;
-                    if (ch_b) pos -= inc; else pos += inc;
-                    if (pos > max_pos) { 
-                        if (is_looped)
-                            pos = min_pos;
-                        else 
-                            pos = max_pos;
-                    }
-                    if (pos < min_pos) {
-                        if (is_looped)
-                            pos = max_pos;
-                        else
-                            pos = min_pos;
-                    }
+                changed = now_t;
+                if (ch_b) pos -= inc; else pos += inc;
+                if (pos > max_pos) { 
+                if (is_looped)
+				    pos = min_pos;
+                else 
+                    pos = max_pos;
                 }
-                pt = 0; 
+                if (pos < min_pos) {
+                    if (is_looped)
+                        pos = max_pos;
+                    else
+                        pos = min_pos;
+                }
+            }
+            pt = 0; 
         }
     }
 }

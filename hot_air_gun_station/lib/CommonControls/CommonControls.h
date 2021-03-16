@@ -119,11 +119,11 @@ class SWITCH {
 
 class ENCODER {
     public:
-    enum class Direction {
-    NOROTATION = 0,
-    CLOCKWISE = 1,
-    COUNTERCLOCKWISE = -1
-  };
+	  enum class Direction {
+      NOROTATION = 0,
+      CLOCKWISE = 1,
+      COUNTERCLOCKWISE = -1
+    };
 
    // ----- Constructor -----
         ENCODER(uint8_t aPIN, uint8_t bPIN, int16_t initPos = 0, uint16_t fastTimeout = 300, uint16_t overPress = 1000, bool reverseDir = false);
@@ -135,19 +135,7 @@ class ENCODER {
         void        reset(int16_t initPos, int16_t low, int16_t upp, uint8_t inc = 1, uint8_t fast_inc = 0, bool looped = false);
         bool        write(int16_t initPos);
         void        changeINTR(void);
-		  // Returns the RPM
- //       unsigned long getRPM();
-		  /** 
-   * Return the speed of the encoder.
-   *
-   * Calculate the speed (steps per second) for the encoder.
-   * The sampling period is set using the setPeriod() method.
-   * If the encoder is used to enter numbers or scan through menus, the speed 
-   * can be used to accelerate the display (eg, skip larger values for each click).
-   *
-   * \return The speed in clicks per second.
-   */
-  //  inline uint16_t speed(void) { return(_spd); };
+
     private:
         int32_t     min_pos, max_pos;
         uint8_t     m_pin, s_pin;                     // The pin numbers connected to the main channel and to the socondary channel

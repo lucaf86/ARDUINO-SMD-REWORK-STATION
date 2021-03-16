@@ -1,24 +1,19 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 2.5
- * Released Dec 19, 2020
+ * Version 2.6
+ * Released Mar 15, 2021
  */
 
-
-//bug: when in PID menu after a douple of seconds "FAILED TEMP" msg happen
-
-//todo: avoid rewrite pwm fan register if fan speed does not change
 //to test: thermocouple error check should work also when not ON. OK done!
 //todo: Keep temp must avoid resetting back to another state after an abort
 //todo: draw current temp with different color if near, below, higher that set temp
 //todo: evaluate if possile to join fanTune and PID cfg menu in one
 //todo: if possible try to avoid AC synch error on power off 
-//todo: use defines for the colors used to higlight the selection ond/or thr editable value (in fan and pid cfg menu or in main/work screen)
 //todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed alway rewrited in eeprom now
 //todo: add watchdog
-//todo: when exit from fan menu display save menu instead the pid menu (the fisrt in the init of cfg screen )
-//todo: remove fan_speed_raw global variable
 //todo: make editable the min fan cooling speed
+//todo: two set of pid coeff, one aggressive for fast heating and another to keep temp
+//todo: more sensitive cradle detection
 
 //todo/to test: tune Encoder Time in ms to change encoder quickly (see fast_timeoutn library) 
 //              todo: still not ok, try to ignore fast move and set 1 increment in any case or change library!
@@ -54,6 +49,15 @@ MAX_SO   12 --> A1 (or A5)
 //#define DISABLE_K_TH_CHECK 
 //#define DISABLE_FAN_CHECK
 //#define EMULATE_TEMP
+//#define DEBUG_PRINT_ENABLE
+
+#ifdef DEBUG_PRINT_ENABLE
+#define printDebug(a) Serial.print(a)
+#define printDebugLn(a) Serial.println(a)
+#else
+#define printDebug(a)
+#define printDebugLn(a)
+#endif
 /****************/
 
 #define PID_SCREEN
@@ -98,6 +102,7 @@ MAX_SO   12 --> A1 (or A5)
 
 #define H_LENGTH_POWER 16  // History queue for pid power calculation /* must be greater that 3! */
 #define H_LENGTH_TEMP 8    // History queue for temperature read accumulation /* must be greater that 3! */
+#define H_LENGTH_FAN  4    // History queue for fan current read accumulation /* must be greater that 3! */
 
 #define AC_SYNC_PIN        2                                        // Outlet 220 v synchronization pin. Do not change!
 #define HOT_GUN_PIN        7                                        // Hot gun heater management pin
@@ -125,8 +130,6 @@ const char failText[] = {"= FAILED ="};
 #endif
 
 MAX6675 thermocouple(MAXCS);
-
-uint8_t    fan_speed_raw;
 
 /* Arduino Software reset function */
 void(* resetFunc) (void) = 0; //declare arduino software reset function @ address 0
@@ -700,7 +703,7 @@ class DSPL : protected TFT_ST7735 {
         void    msgFail(void);                                              // Show 'Fail' message
  //       void    msgTune(void);                                              // Show 'Tune' message
         void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
-        void    msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t min, uint16_t max, uint16_t fan_speed_raw);
+        void    msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t min, uint16_t max, uint16_t fan_current);
         void    msgPidTune(uint8_t mode, uint16_t kp, uint16_t ki, uint16_t kd, uint8_t kSel);
         void    message(const char *msg, const char *msg1);
     private:
@@ -762,6 +765,10 @@ void DSPL::tSet(uint16_t t, bool isActive) {
     TFT_print("C", X_PIXEL(10+8+strWidth), Y_PIXEL(0), LCD_SMALL_FONT);
     //TFT_ST7735::drawCircle(X_PIXEL(16+strWidth), Y_PIXEL(16), 2, color);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
+    printDebug("Tset: ");
+    printDebug(t);
+    printDebug("  active: ");
+    printDebugLn(isActive);
 }
 
 void DSPL::tCurr(uint16_t t) {
@@ -774,6 +781,7 @@ void DSPL::tCurr(uint16_t t) {
     TFT_textPadding(TFT_ST7735::textWidth("000", LCD_BIG_FONT));
     TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, yPos, LCD_BIG_FONT);
     TFT_resetTextPadding();
+    printDebugLn(t);
 }
 
 /*
@@ -823,6 +831,11 @@ void DSPL::fanSpeed(uint8_t s, bool isActive) {
     TFT_rightPrint(buff,X_PIXEL(FAN_BM_WIDTH/*icon pixel*/ + FAN_BITMAP_X_OFFSET + 16/*offset*/ + maxStringWidth), SCREEN_HEIGHT - 1 - textHeight/*16*/, LCD_SMALL_FONT);
   //  TFT_resetTextPadding();
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
+    printDebug("Fan: ");
+    printDebug(s);
+    printDebug("  active: ");
+    printDebugLn(isActive);
+    
 }
 
 void DSPL::appliedPower(uint8_t p, bool show_zero) {
@@ -870,9 +883,11 @@ void DSPL::msgFail(void) {
     TFT_centrePrint(buff, SCREEN_WIDTH/2 -1, SCREEN_HEIGHT/2 - textHeight - 4, LCD_DEFAULT_FONT);
     TFT_centrePrint(buff1, SCREEN_WIDTH/2 -1, SCREEN_HEIGHT/2 + 4, LCD_DEFAULT_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
+    printDebug(buff);
+    printDebugLn(buff1);
 }
 
-void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_max, uint16_t fan_speed_raw)  {
+void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_max, uint16_t fan_current)  {
     uint16_t max_color = LCD_TEXT_COLOR;
     TFT_print("Fan Tune",X_PIXEL(0), Y_PIXEL(0), LCD_DEFAULT_FONT);
     
@@ -916,11 +931,13 @@ void DSPL::msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t f_min, uint16_t f_m
     // draw fan icon
     TFT_ST7735::drawBitmap(X_PIXEL(FAN_BITMAP_X_OFFSET + 16), SCREEN_HEIGHT - Y_PIXEL_OFFSET - 26 + 4, bmFan, FAN_BM_WIDTH, FAN_BM_HEIGHT, TFT_CYAN);
     uint16_t maxStringWidth = TFT_ST7735::textWidth("255", LCD_SMALL_FONT); // Max adc read value with 8bit precision is 255
-    snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", fan_speed_raw);
+    snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", fan_current);
     uint8_t padding = maxStringWidth - TFT_ST7735::textWidth(buff, LCD_SMALL_FONT); // with 8bit adc precision fan current read by adc could go under 100
     // clear extra digit
     TFT_ST7735::fillRect(X_PIXEL(FAN_BITMAP_X_OFFSET + 16 + FAN_BM_WIDTH/*icon pixel*/ + 16/*offset*/), SCREEN_HEIGHT - 1 - Y_PIXEL_OFFSET - textHeight, padding, textHeight-7, LCD_BACKGROUND_COLOR);
     TFT_rightPrint(buff, X_PIXEL(FAN_BITMAP_X_OFFSET + 16 + FAN_BM_WIDTH/*icon pixel*/ + 16/*offset*/ + maxStringWidth), SCREEN_HEIGHT - 1 - Y_PIXEL_OFFSET - textHeight, LCD_DEFAULT_FONT);
+    printDebug("Fan_adc: ");
+    printDebugLn(fan_current);
 }
 
 void DSPL::msgPidTune(uint8_t mode, uint16_t kp, uint16_t ki, uint16_t kd, uint8_t kSel)
@@ -1173,9 +1190,9 @@ class FastPWM_D9 {
     public:
         FastPWM_D9()                                { }
         void init(void);
-        void setDutyPwm(uint8_t d)                  { OCR1A = d; }
+        void setDutyPwm(uint8_t d)                  { if(OCR1A != d) { OCR1A = d; } }
         uint8_t   getFanSpeedPwm(void)              { return OCR1A; }
-        uint8_t   fanCurrent(void)                  { //bitClear(ADCSRA, ADEN); // disable ADC while reading result conversion
+        uint8_t   readFanCurrent(void)              { //bitClear(ADCSRA, ADEN); // disable ADC while reading result conversion
                                                       while (bit_is_set(ADCSRA, ADSC)) { } // assert the end of measurement
                                                       return ADCH; // read 8bit adc High register. Low register doesn't matter with ADLAR set
                                                       
@@ -1235,7 +1252,7 @@ void FastPWM_D9::init(void) {
 class HOTGUN : public PID {
     public:
         typedef enum { POWER_OFF, POWER_ON, POWER_COOLING } PowerMode;
-        HOTGUN(/*uint8_t HG_sen_pin,*/ uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin, uint8_t _h_power_len, uint8_t _h_temp_len) ;
+        HOTGUN(/*uint8_t HG_sen_pin,*/ uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin, uint8_t _h_power_len, uint8_t _h_temp_len, uint8_t _h_fan_len) ;
         void        init(void);
         bool        isOn(void)                                              { return (mode == POWER_ON /*|| mode == POWER_FIXED*/); }
         void        setTemp(uint16_t t)                                     { temp_set = constrain(t, min_temp, max_temp); }
@@ -1251,7 +1268,8 @@ class HOTGUN : public PID {
         void        setFanCurrentThreshold(uint8_t minTh, uint8_t maxTh)    { minFanTh = minTh; maxFanTh = maxTh; }
         uint8_t     getFanCurrentMinThreshold(void)                         { return minFanTh; }
         uint8_t     getFanCurrentMaxThreshold(void)                         { return maxFanTh; }
-        uint8_t     getFanCurrent(void)                                     { return hg_fan.fanCurrent(); }                                
+        uint8_t     getFanCurrent(void)                                     { return h_fanCurrent.average();/*hg_fan.fanCurrent();*/ } 
+        uint8_t     readFanCurrent(void)                                    { return hg_fan.readFanCurrent(); }                             
         uint8_t     presetFanPcnt(void);
         uint8_t     fanPwmToPcnt(uint8_t fanPwm);
         void        fanAdcStart(void)                                       { return hg_fan.fanAdcStart(); }
@@ -1279,7 +1297,7 @@ class HOTGUN : public PID {
         uint8_t     relay_pin;
         HISTORY     h_power;                                                // The history queue of power applied values
         HISTORY     h_temp;                                                 // The history queue of the temperature
-        //EMP_AVERAGE e_sensor;                                               // The exponential average of sensor data
+        HISTORY     h_fanCurrent;                                           // The exponential average of fan current
         volatile    uint8_t     cnt;
         volatile    uint8_t     actual_power;
         volatile    bool        active;
@@ -1304,7 +1322,7 @@ class HOTGUN : public PID {
         const       uint32_t    relay_activate  = 1;        // The relay activation delay
 };
 
-HOTGUN::HOTGUN(/*uint8_t HG_sen_pin,*/ uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin, uint8_t _h_power_len, uint8_t _h_temp_len) : PID(PID_KP, PID_KI, PID_KD), h_power(_h_power_len), h_temp(_h_temp_len) {
+HOTGUN::HOTGUN(/*uint8_t HG_sen_pin,*/ uint8_t HG_pwr_pin, uint8_t HG_ACrelay_pin, uint8_t _h_power_len, uint8_t _h_temp_len, uint8_t _h_fan_len) : PID(PID_KP, PID_KI, PID_KD), h_power(_h_power_len), h_temp(_h_temp_len), h_fanCurrent(_h_fan_len) {
     //sen_pin   = HG_sen_pin;
     gun_pin   = HG_pwr_pin;
     relay_pin = HG_ACrelay_pin;
@@ -1449,8 +1467,12 @@ uint8_t HOTGUN::readTemp(void) {
         thermocoupleErrorCnt = 0;
         //Serial.println("th ok");
     }
+    
+    h_fanCurrent.put(hg_fan.readFanCurrent());
+    uint8_t fanCurrent = h_fanCurrent.average();
+    printDebug("fanCurrent: ");
+    printDebugLn(fanCurrent);
 
-    uint8_t fanCurrent = getFanCurrent();
     if (hg_fan.getFanSpeedPwm() && ((fanCurrent < minFanTh) || (fanCurrent > maxFanTh))) { /* Fan is on and sensing current is lower or higher than the threshold */
         fanCurrentErrorCnt++;
     }
@@ -1476,14 +1498,6 @@ int8_t HOTGUN::keepTemp(void) {
     errorFan = errorTc >> 4;
     errorTc = errorTc & 0xF;
 
-    //fan_speed_sens = analogRead(sen_pin);                                   // Check the hot air fan speed
-    //fan_speed_raw = analogRead(sen_pin);//fan_speed_sens;                                         // Check the hot air fan speed
-
-    //uint16_t temp = analogRead(sen_pin);                                  // Check the hot air gun temperature
-    //double c = thermocouple.readCelsius();
-    //uint16_t temp = e_sensor.read();                                      // Average value of the hot air gun temperature
-    //h_temp.put(temp);
-
     if(/* isOn() && */                                                                    /* Heater is ON */ 
        ((errorTc > TC_ERROR_TOLLERANCE) // ||                                          /* MAX6675 reading error */
        //(hg_fan.fanSpeed() && ((fanCurrent < minFanTh) || (fanCurrent > maxFanTh))) /* Fan sensing current is lower or higher tha the threshold */
@@ -1495,7 +1509,7 @@ int8_t HOTGUN::keepTemp(void) {
         setFanDuty(max_working_fan);
         return -1;
     }
-    else if (errorFan > FAN_ERROR_TOLLERANCE) {
+    else if (errorFan > FAN_ERROR_TOLLERANCE) { // tollerance to take into account spin up time of the fan
         // In case of errors on Fan feedback shutdown immediately
         // but leave the fan spinning at max speed for safety and cool down the heater
         shutdown();
@@ -1508,7 +1522,7 @@ int8_t HOTGUN::keepTemp(void) {
     uint16_t temp = getCurrTemp();
     uint8_t fan;
      
-    if (!chill && (mode == POWER_ON) && (temp > (temp_set + 8))) { // Prevent global over heating
+    if (!chill && (mode == POWER_ON) && (temp > (temp_set + 10))) { // Prevent global over heating
         //digital_write(gun_pin, LOW);
         p = 0;
         chill = true;                                               // Turn off the power in main working mode only;
@@ -1572,6 +1586,10 @@ int8_t HOTGUN::keepTemp(void) {
             break;
         default:
             break;
+    }
+    // Only supply the power to the heater if the gun is connected and the fan is on
+    if((fanPwmToPcnt((hg_fan.getFanSpeedPwm())) < min_working_fan) || !isGunConnected()) {
+        p = 0;
     }
     h_power.put(p);
     actual_power = p;
@@ -1648,7 +1666,8 @@ uint8_t HOTGUN::presetFanPcnt(void) {
 }
 
 uint8_t HOTGUN::fanPwmToPcnt(uint8_t fanPwm) {
-  return ((fanPwm * 100) / 255);
+  //return ((fanPwm * 100) / 255);
+  return (((fanPwm*100)+128)>>8);
 }
 
 //------------------------------------------ class SCREEN ------------------------------------------------------
@@ -2136,8 +2155,7 @@ void fanSCREEN::init(void) {
 SCREEN* fanSCREEN::show(void){
     if (millis() < update_screen) return this;
     update_screen = millis() + period;
-    fan_speed_raw = pHG->getFanCurrent();//analogRead(FAN_GUN_SENS_PIN);
-    pD->msgFanTune(modeSel, fanSet, fan_min, fan_max, fan_speed_raw);
+    pD->msgFanTune(modeSel, fanSet, fan_min, fan_max, pHG->getFanCurrent());
     return this;
 }
 
@@ -2167,7 +2185,7 @@ SCREEN* fanSCREEN::menu_long(void){
     //pHG->switchPower(false);
     pHG->setFanDuty(0); // power off fan
     //pCfg->applyFanData(fan_min, fan_max);
-    pCfg->saveFanData(fan_min, fan_max, false);    // update threshold in config struct without writing to eeprom
+    pCfg->saveFanData(fan_min, fan_max, true);    // update threshold in config struct and write to eeprom
     pHG->setFanCurrentThreshold(fan_min, fan_max); // update threshold in hotgan class, needed in keepTemp for runtime fan check
     if (next) return next;
     return this;
@@ -2191,9 +2209,9 @@ void fanSCREEN::rotaryValue(int16_t value){
 }
 
 //=========================================================================================================
-HOTGUN      hg(/*FAN_GUN_SENS_PIN,*/ HOT_GUN_PIN, AC_RELAY_PIN, H_LENGTH_POWER, H_LENGTH_TEMP);
+HOTGUN      hg(/*FAN_GUN_SENS_PIN,*/ HOT_GUN_PIN, AC_RELAY_PIN, H_LENGTH_POWER, H_LENGTH_TEMP, H_LENGTH_FAN);
 DSPL        disp;
-//ENCODER     rotEncoder(R_MAIN_PIN, R_SECD_PIN, 0, 600, 1000);
+//ENCODER     rotEncoder(R_MAIN_PIN, R_SECD_PIN, 0 /*init position*/, 600 /*fast change time*/, 1000 /*over pressed*/);
 ENCODER     rotEncoder(R_MAIN_PIN, R_SECD_PIN, 0 /*init position*/, 12 /*fast change speed in steps per second*/, 0 /* not used */);
 BUTTON      rotButton(R_BUTN_PIN, 3000, 200, 900, 50);
 SWITCH      reedSwitch(REED_SW_PIN);
@@ -2291,7 +2309,7 @@ void setup() {
     pidScr.next    = &cfgScr;
 #endif
     errScr.next     = &offScr;
-    fanScr.next     = &cfgScr;//&offScr;
+    fanScr.next     = &offScr;//&cfgScr;
     
     //thermocouple.begin();
     
@@ -2333,11 +2351,11 @@ void setup() {
     hg.setFanDuty(max_working_fan);
     delay(3000);
     hg.fanAdcStart();
-    fan_current_max = hg.getFanCurrent();
+    fan_current_max = hg.readFanCurrent();
     hg.setFanDuty(min_working_fan);
     delay(3000);
     hg.fanAdcStart();
-    fan_current_min = hg.getFanCurrent();
+    fan_current_min = hg.readFanCurrent();
     hg.setFanDuty(0);
 
     //cfgLoad = false; //for test only
@@ -2364,6 +2382,7 @@ void setup() {
 }
 
 void loop(){
+  //Serial.println("loop");
     static bool     reset_encoder   = true;
     static int16_t  old_pos         = 0;
 #ifdef DISABLE_AC_CHECK
