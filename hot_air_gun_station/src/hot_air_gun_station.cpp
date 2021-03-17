@@ -1,6 +1,6 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 2.6
+ * Version 2.7
  * Released Mar 15, 2021
  */
 
@@ -25,6 +25,7 @@
 #include <CommonControls.h>
 #include <EEPROM.h>
 #include <SPI.h>
+#include <mdPushButton.h>
 
 //free pin 10, A1, (A6, A7 if usin g arduino nano)
 
@@ -103,6 +104,9 @@ MAX_SO   12 --> A1 (or A5)
 #define H_LENGTH_POWER 16  // History queue for pid power calculation /* must be greater that 3! */
 #define H_LENGTH_TEMP 8    // History queue for temperature read accumulation /* must be greater that 3! */
 #define H_LENGTH_FAN  4    // History queue for fan current read accumulation /* must be greater that 3! */
+
+#define REED_ON_TIME_DELAY    500
+#define REED_OFF_TIME_DELAY   700//1000
 
 #define AC_SYNC_PIN        2                                        // Outlet 220 v synchronization pin. Do not change!
 #define HOT_GUN_PIN        7                                        // Hot gun heater management pin
@@ -702,7 +706,7 @@ class DSPL : protected TFT_ST7735 {
         void    msgCold(void);
         void    msgFail(void);                                              // Show 'Fail' message
  //       void    msgTune(void);                                              // Show 'Tune' message
-        void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
+ //       void    msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2);
         void    msgFanTune(uint8_t modeSel, uint8_t sel, uint16_t min, uint16_t max, uint16_t fan_current);
         void    msgPidTune(uint8_t mode, uint16_t kp, uint16_t ki, uint16_t kd, uint8_t kSel);
         void    message(const char *msg, const char *msg1);
@@ -744,13 +748,15 @@ void DSPL::backgroundInit(void){
     TFT_ST7735::drawLine(X_PIXEL(40), Y_PIXEL(26), X_PIXEL(40), SCREEN_HEIGHT-1-Y_PIXEL_OFFSET-26, LCD_LINE_COLOR);
 }
 
+/*
 void DSPL::msgTip(uint16_t tip0, uint16_t tip1, uint16_t tip2){
-    //char buff[17];
-//    setCharCursor(0, 4);
-// tmp disable    sprintf(buff, "Cal: %3d %3d %3d", tip0, tip1, tip2);
-// tmp disable    print(buff);
-}
-
+    char buff[17];
+    setCharCursor(0, 4);
+    sprintf(buff, "Cal: %3d %3d %3d", tip0, tip1, tip2);
+    print(buff);
+} 
+ */
+ 
 void DSPL::tSet(uint16_t t, bool isActive) {
     snprintf(buff, DSPL_MAX_BUFF_SIZE, "%3d", t);
     //print(buff);
@@ -768,7 +774,7 @@ void DSPL::tSet(uint16_t t, bool isActive) {
     printDebug("Tset: ");
     printDebug(t);
     printDebug("  active: ");
-    printDebugLn(isActive);
+    printDebug(isActive);
 }
 
 void DSPL::tCurr(uint16_t t) {
@@ -781,7 +787,7 @@ void DSPL::tCurr(uint16_t t) {
     TFT_textPadding(TFT_ST7735::textWidth("000", LCD_BIG_FONT));
     TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, yPos, LCD_BIG_FONT);
     TFT_resetTextPadding();
-    printDebugLn(t);
+   // printDebugLn(t);
 }
 
 /*
@@ -861,12 +867,14 @@ void DSPL::msgON(uint16_t color) {
     TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
     TFT_rightPrint("on", SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
+    printDebug(" ON ");
 }
 
 void DSPL::msgOFF(uint16_t color) {
     TFT_ST7735::setTextColor(color, LCD_BACKGROUND_COLOR);
     TFT_rightPrint("off",SCREEN_WIDTH - X_PIXEL_OFFSET - LCD_STATUS_OFFSET, Y_PIXEL(0), LCD_SMALL_FONT);
     TFT_ST7735::setTextColor(LCD_TEXT_COLOR, LCD_BACKGROUND_COLOR);
+    printDebug(" OFF ");
 }
 
 void DSPL::msgReady(void) {
@@ -2213,7 +2221,12 @@ HOTGUN      hg(/*FAN_GUN_SENS_PIN,*/ HOT_GUN_PIN, AC_RELAY_PIN, H_LENGTH_POWER, 
 DSPL        disp;
 //ENCODER     rotEncoder(R_MAIN_PIN, R_SECD_PIN, 0 /*init position*/, 600 /*fast change time*/, 1000 /*over pressed*/);
 ENCODER     rotEncoder(R_MAIN_PIN, R_SECD_PIN, 0 /*init position*/, 12 /*fast change speed in steps per second*/, 0 /* not used */);
-BUTTON      rotButton(R_BUTN_PIN, 3000, 200, 900, 50);
+//BUTTON      rotButton(R_BUTN_PIN, 3000, 200, 900, 50);
+#ifdef DISABLE_AC_CHECK
+mdPushButton rotButton = mdPushButton(R_BUTN_PIN, LOW, true);
+#else
+mdPushButton rotButton = mdPushButton(R_BUTN_PIN, LOW, false);
+#endif
 SWITCH      reedSwitch(REED_SW_PIN);
 HOTGUN_CFG  hgCfg;
 BUZZER      simpleBuzzer(BUZZER_PIN, BUZZER_ACTIVE);
@@ -2242,7 +2255,7 @@ void rotEncChange(void) {
 void setup() {
 #if defined (DEBUG_PRINT_ENABLE)
     Serial.begin(115200);
-    Serial.println("setup...");
+    printDebugLn("setup...");
 #endif
     uint8_t fan_current_min, fan_current_max;
     boolean cfgLoad;
@@ -2251,13 +2264,15 @@ void setup() {
 #ifdef DISABLE_AC_CHECK
     // Initialize rotary encoder
     rotEncoder.init();
-    rotButton.init();
+//    rotButton.init();
 #else
     // Initialize rotary encoder
     rotEncoder.init(false);
-    rotButton.init(false);
+//    rotButton.init(false);
 #endif
-
+    rotButton.setMultiClickTime(150);
+    rotButton.setHoldTime(1000);
+    
     pCurrentScreen = &errScr; // set error screen as  default, if everything OK will be changed at the end of the setup
     
     delay(100);
@@ -2285,7 +2300,7 @@ void setup() {
     hg.changePID(3, hgCfg.getPidKd());
     hg.setFanCurrentThreshold(hgCfg.getMinFanSpeedSens(),hgCfg.getMaxFanSpeedSens());
     
-    reedSwitch.init(500, 3000);
+    reedSwitch.init(REED_ON_TIME_DELAY, REED_OFF_TIME_DELAY);
 
 //    attachInterrupt(digitalPinToInterrupt(R_MAIN_PIN), rotEncChange,   CHANGE);
     attachInterrupt(digitalPinToInterrupt(AC_SYNC_PIN), syncAC, RISING);
@@ -2385,13 +2400,15 @@ void loop(){
   //Serial.println("loop");
     static bool     reset_encoder   = true;
     static int16_t  old_pos         = 0;
+    static bool     old_reed_status = false;
 #ifdef DISABLE_AC_CHECK
  static uint32_t ac_check        = 1000;
 #else
     static uint32_t ac_check        = 5000;
 #endif
-int8_t hgError;
-
+    int8_t hgError;
+    SCREEN* nxt = pCurrentScreen;
+    
     int16_t pos = rotEncoder.read();
     if (reset_encoder) {
         old_pos = pos;
@@ -2403,15 +2420,55 @@ int8_t hgError;
         }
     }
 
-    SCREEN* nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
-    if (nxt != pCurrentScreen) {
-        pCurrentScreen = nxt;
-        pCurrentScreen->init();
-        reset_encoder = true;
-        return;
+    bool reed_status = reedSwitch.status();
+    if(old_reed_status != reed_status) {
+      nxt = pCurrentScreen->reedSwitch(reedSwitch.status());
+      old_reed_status = reed_status;
+      if (nxt != pCurrentScreen) {
+          //Serial.println("reedSwitch change");
+          pCurrentScreen = nxt;
+          pCurrentScreen->init();
+          reset_encoder = true;
+          return;
+      }
     }
-
-    uint8_t bStatus = rotButton.buttonCheck();
+//    uint8_t bStatus = rotButton.buttonCheck();
+    int bStatus = rotButton.status();
+    switch (bStatus) {
+        case -1:  // long press 
+            //Serial.println("Long button press");
+            nxt = pCurrentScreen->menu_long();
+            if (nxt != pCurrentScreen) {
+                pCurrentScreen = nxt;
+                pCurrentScreen->init();
+                reset_encoder = true;
+            }
+            break;
+        case  1:  // short press
+            //Serial.println("Button pressed once");
+            nxt = pCurrentScreen->menu();
+            if (nxt != pCurrentScreen) {
+                pCurrentScreen = nxt;
+                pCurrentScreen->init();
+                reset_encoder = true;
+            }
+            break;
+        case  2:  // double short press
+            //Serial.print("Button pressed "); Serial.print(bStatus); Serial.println(" times");
+            nxt = pCurrentScreen->reedSwitch(true);
+            if (nxt != pCurrentScreen) {
+                pCurrentScreen = nxt;
+                pCurrentScreen->init();
+                reset_encoder = true;
+                return;
+                //Serial.println("this print should be skipped because of return");
+            }
+            break;
+        case  0: // not pressed or more than 2 short press
+        default:
+            break;
+    }
+/*
     switch (bStatus) {
         case 2:                                                             // long press;
             nxt = pCurrentScreen->menu_long();
@@ -2433,7 +2490,7 @@ int8_t hgError;
         default:
             break;
     }
-
+*/
     nxt = pCurrentScreen->show();
     if (nxt && pCurrentScreen != nxt) {                                     // Be paranoiac, the returned value must not be null
         pCurrentScreen = nxt;
