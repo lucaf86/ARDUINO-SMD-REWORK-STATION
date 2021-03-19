@@ -1,7 +1,7 @@
 /*
  * Hot air gun controller based on atmega328 IC
- * Version 2.7
- * Released Mar 15, 2021
+ * Version 2.8b
+ * Released Mar 18, 2021
  */
 
 //to test: thermocouple error check should work also when not ON. OK done!
@@ -9,13 +9,13 @@
 //todo: draw current temp with different color if near, below, higher that set temp
 //todo: evaluate if possile to join fanTune and PID cfg menu in one
 //todo: if possible try to avoid AC synch error on power off 
-//todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed alway rewrited in eeprom now
-//todo: add watchdog
+//todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed alway rewritten in eeprom now
+//done: add watchdog
 //todo: make editable the min fan cooling speed
 //todo: two set of pid coeff, one aggressive for fast heating and another to keep temp
-//todo: more sensitive cradle detection
+//dobe: more sensitive cradle detection
 
-//todo/to test: tune Encoder Time in ms to change encoder quickly (see fast_timeoutn library) 
+//done: tune Encoder Time in ms to change encoder quickly (see fast_timeoutn library) 
 //              todo: still not ok, try to ignore fast move and set 1 increment in any case or change library!
 
 
@@ -26,6 +26,7 @@
 #include <EEPROM.h>
 #include <SPI.h>
 #include <mdPushButton.h>
+#include <avr/wdt.h>
 
 //free pin 10, A1, (A6, A7 if usin g arduino nano)
 
@@ -108,6 +109,9 @@ MAX_SO   12 --> A1 (or A5)
 #define REED_ON_TIME_DELAY    500
 #define REED_OFF_TIME_DELAY   700//1000
 
+#define BUZZER_TYPE_ACTIVE 0                                        // 1 - Active buzzer beeps when +5v supplied to it
+                                                                    // 0 - passive buzzer beeps when a tone signal is supplied
+
 #define AC_SYNC_PIN        2                                        // Outlet 220 v synchronization pin. Do not change!
 #define HOT_GUN_PIN        7                                        // Hot gun heater management pin
 #define FAN_GUN_PIN        9                                        // Hot gun fan management pin. DO NOT CHANGE due to PWM control!
@@ -120,7 +124,7 @@ MAX_SO   12 --> A1 (or A5)
 
 #define REED_SW_PIN        8                                        // Reed switch pin
 #define BUZZER_PIN         6                                        // Buzzer pin
-#define BUZZER_ACTIVE  false                                        // Active buzzer beeps when +5v supplied to it
+
 #define MAXCS             A3
 
 const char failText[] = {"= FAILED ="};
@@ -359,16 +363,16 @@ class HOTGUN_CFG : public CONFIG {
         uint16_t getPidKi(void);
         uint16_t getPidKd(void);
     private:
-        uint16_t t_tip[3];
+        //uint16_t t_tip[3];
         //uint16_t minFanSpeedSens;
         //uint16_t maxFanSpeedSens;
-        const   uint16_t def_tip[3] = {200, 300, 400};//{55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
+        //const   uint16_t def_tip[3] = {200, 300, 400};//{55, 445, 900};//{587, 751, 850};                      // Default values of internal sensor readings at reference temperatures
         const   uint16_t min_temp  = TEMP_MIN_C;
         const   uint16_t max_temp  = TEMP_MAX_C;
         const   uint16_t def_temp  = 190;                                   // Default preset temperature
         const   uint8_t  def_fan   = 90;                                    // Default preset fan speed 0 - 100%
-        const   uint16_t ambient_temp = TEMP_AMB_C;
-        const   uint16_t ambient_tempC=TEMP_AMB_C;
+        //const   uint16_t ambient_temp = TEMP_AMB_C;
+        //const   uint16_t ambient_tempC=TEMP_AMB_C;
         const   uint16_t def_minFanSpeedSens = 105;                         // fan min current threshold in 0-255 pwm step
         const   uint16_t def_maxFanSpeedSens = 230;                         // fan MAX current threshold in 0-255 pwm step
         const   uint16_t def_pid_kp = PID_KP;
@@ -533,7 +537,7 @@ uint16_t HOTGUN_CFG::getPidKd(void) {
 //------------------------------------------ class BUZZER ------------------------------------------------------
 class BUZZER {
   public:
-        BUZZER(byte buzzerP, bool active = true)    { buzzer_pin = buzzerP; this->active = active; }
+        BUZZER(byte buzzerP)    { buzzer_pin = buzzerP; }
     void init(void);
     void shortBeep(void);
     void lowBeep(void);
@@ -541,40 +545,52 @@ class BUZZER {
     void failedBeep(void);
   private:
     byte buzzer_pin;
-        bool active;
 };
 
 void BUZZER::init(void) {
     pin_mode(buzzer_pin, OUTPUT);
-    if (active) {
-            digital_write(buzzer_pin, LOW);
-    } else {
-    noTone(buzzer_pin);
+    #if (BUZZER_TYPE_ACTIVE) 
+    {
+        digital_write(buzzer_pin, LOW);
+    } 
+    #else 
+    {
+        noTone(buzzer_pin);
     }
+    #endif
 }
 
 void BUZZER::shortBeep(void) {
-    if (active) {
+    #if (BUZZER_TYPE_ACTIVE) 
+    {
        digital_write(buzzer_pin, HIGH);
        delay(80);
        digital_write(buzzer_pin, LOW);
-    } else {
+    } 
+    #else
+    {
         tone(buzzer_pin, 3520, 160);
     }
+    #endif
 }
 
 void BUZZER::lowBeep(void) {
-    if (active) {
+    #if (BUZZER_TYPE_ACTIVE) 
+    {
         digital_write(buzzer_pin, HIGH);
         delay(160);
         digital_write(buzzer_pin, LOW);
-    } else {
+    } 
+    #else 
+    {
         tone(buzzer_pin,  880, 160);
     }
+    #endif
 }
 
 void BUZZER::doubleBeep(void) {
-    if (active) {
+    #if (BUZZER_TYPE_ACTIVE) 
+    {
         digital_write(buzzer_pin, HIGH);
         delay(160);
         digital_write(buzzer_pin, LOW);
@@ -582,15 +598,19 @@ void BUZZER::doubleBeep(void) {
         digital_write(buzzer_pin, HIGH);
         delay(160);
         digital_write(buzzer_pin, LOW);
-    } else {
+    } 
+    #else 
+    {
         tone(buzzer_pin, 3520, 160);
         delay(300);
         tone(buzzer_pin, 3520, 160);
     }
+    #endif
 }
 
 void BUZZER::failedBeep(void) {
-    if (active) {
+    #if (BUZZER_TYPE_ACTIVE) 
+    {
         digital_write(buzzer_pin, HIGH);
         delay(170);
         digital_write(buzzer_pin, LOW);
@@ -602,13 +622,16 @@ void BUZZER::failedBeep(void) {
         digital_write(buzzer_pin, HIGH);
         delay(80);
         digital_write(buzzer_pin, LOW);
-    } else {
+    } 
+    #else
+    {
         tone(buzzer_pin, 3520, 160);
         delay(170);
         tone(buzzer_pin,  880, 250);
         delay(260);
         tone(buzzer_pin, 3520, 160);
     }
+    #endif
 }
 
 //------------------------------------------ class lcd DSPLay for soldering IRON -----------------------------
@@ -788,6 +811,9 @@ void DSPL::tCurr(uint16_t t) {
     TFT_centrePrint(buff, SCREEN_WIDTH/2 + 24, yPos, LCD_BIG_FONT);
     TFT_resetTextPadding();
    // printDebugLn(t);
+    printDebug(" tCurr: ");
+    printDebug(t);
+    printDebug("  ");
 }
 
 /*
@@ -1292,9 +1318,9 @@ class HOTGUN : public PID {
         //uint8_t     getMaxFixedPower(void)                                  { return max_fix_power; }
         bool        syncCB(void);                                           // Return true at the end of the power period
         void        activateRelay(bool activate);
+        void        shutdown(void);
     private:
         bool        isGunConnected(void)                                    { return true; }
-        void        shutdown(void);
         uint16_t    emulateTemp(void);                                      // To debug the project, simulate the Hot Air Gun heating process
         FastPWM_D9  hg_fan;
         uint16_t    temp_set;                                               // The preset temperature of the hot air gun (internal units)
@@ -2074,7 +2100,7 @@ void pidSCREEN::rotaryValue(int16_t value) {
     }
     pD->msgPidTune(mode, pHG->changePID(1, -1), pHG->changePID(2, -1), pHG->changePID(3, -1), pEnc->read() );  // When called with negative values changePID() return current value
 
-    //forceRedraw();
+    forceRedraw();
 }
 
 SCREEN* pidSCREEN::show(void) {
@@ -2095,6 +2121,7 @@ SCREEN* pidSCREEN::menu(void) {                                             // T
         pEnc->reset(mode, 1, 3, 1, 1, true);                                   // 1 - Kp, 2 - Ki, 3 - Kd
         mode = 0;
     }
+    forceRedraw();
     return this;
 }
 
@@ -2229,7 +2256,7 @@ mdPushButton rotButton = mdPushButton(R_BUTN_PIN, LOW, false);
 #endif
 SWITCH      reedSwitch(REED_SW_PIN);
 HOTGUN_CFG  hgCfg;
-BUZZER      simpleBuzzer(BUZZER_PIN, BUZZER_ACTIVE);
+BUZZER      simpleBuzzer(BUZZER_PIN);
 
 mainSCREEN   offScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
 workSCREEN   wrkScr(&hg,  &disp, &rotEncoder, &simpleBuzzer, &hgCfg);
@@ -2252,7 +2279,36 @@ void rotEncChange(void) {
     rotEncoder.changeINTR();
 }
 
+// Initialize watchdog with 500ms timeout
+void watchdog_init() {
+    // Enable the watchdog timer, but only for the interrupt.
+    // Take care, as this requires the correct order of operation, with interrupts disabled.
+    // See the datasheet of any AVR chip for details.
+    wdt_reset();
+    cli();
+    _WD_CONTROL_REG = _BV(_WD_CHANGE_BIT) | _BV(WDE);
+    //_WD_CONTROL_REG = _BV(WDIE) | (1 << WDP2) | (1 << WDP0); // enable interrupt, no system reset mode, 0.5s time-out
+    _WD_CONTROL_REG = _BV(WDIE) | (1 << WDP2) | (1 << WDP1); // enable interrupt, no system reset mode, 1s time-out
+    sei();
+    wdt_reset();
+    //delay(800); // test it!
+}
+
+void watchdog_disable() {
+    /* disable in terrupt */
+    cli();
+    /* clear MCU status register */
+    MCUSR = 0;
+    /* Disable an clear all watchdog settings */
+    _WD_CONTROL_REG = (1 << WDCE) | (1 << WDE);
+    _WD_CONTROL_REG = 0;
+    /* enable interrupt */
+    sei();
+}
+
 void setup() {
+  watchdog_disable();
+  
 #if defined (DEBUG_PRINT_ENABLE)
     Serial.begin(115200);
     printDebugLn("setup...");
@@ -2394,6 +2450,8 @@ void setup() {
     pCurrentScreen = &offScr;
     pCurrentScreen->init();
 #endif
+
+    watchdog_init();
 }
 
 void loop(){
@@ -2441,8 +2499,9 @@ void loop(){
             if (nxt != pCurrentScreen) {
                 pCurrentScreen = nxt;
                 pCurrentScreen->init();
-                reset_encoder = true;
+                //reset_encoder = true;
             }
+            reset_encoder = true;
             break;
         case  1:  // short press
             //Serial.println("Button pressed once");
@@ -2450,8 +2509,9 @@ void loop(){
             if (nxt != pCurrentScreen) {
                 pCurrentScreen = nxt;
                 pCurrentScreen->init();
-                reset_encoder = true;
+                //reset_encoder = true;
             }
+            reset_encoder = true;
             break;
         case  2:  // double short press
             //Serial.print("Button pressed "); Serial.print(bStatus); Serial.println(" times");
@@ -2545,6 +2605,9 @@ void loop(){
         }
 #endif
     }
+    
+    wdt_reset();
+
 }
 
 ISR(PCINT2_vect) {
@@ -2554,4 +2617,73 @@ static bool busy = false;
     rotEncChange();
     busy = false;
   }
+}
+
+#define FORCE_INLINE  __attribute__((always_inline)) inline
+
+//#define NOP __asm__ __volatile__ ("nop\n\t")
+#define nop() __asm__ __volatile__("nop;\n\t":::)
+
+/*
+  Delay by the provided number of milliseconds.
+  Thus, a 16 bit value will allow a delay of 0..65 seconds
+  Makes use of the _delay_loop_2
+  
+  _delay_loop_2 will do a delay of n * 4 processor cycles.
+  with f = F_CPU cycles per second,
+  n = f / (1000 * 4 )
+  with f = 16000000 the result is 4000
+  with f = 1000000 the result is 250
+  
+  the millisec loop, gcc requires the following overhead:
+  - movev 1
+  - subwi 2x2
+  - bne i 2
+  ==> 7 cycles
+  ==> must be devided by 4, rounded up 7/4 = 2
+*/
+void _MillisecDelay(uint16_t val)
+{
+  while( val != 0 )
+  {
+    _delay_loop_2( (F_CPU / 4000 ) -2);
+    val--;
+  }
+}
+
+/* delay by one micro second */
+void _MicroDelay(void)
+{
+#if (F_CPU / 4000000 ) > 0 
+  _delay_loop_2( (F_CPU / 4000000 ) );
+#endif
+}
+
+/* delay by 10 micro seconds */
+void _10MicroDelay(void)
+{
+#if (F_CPU / 400000 ) > 0 
+  _delay_loop_2( (F_CPU / 400000 ) );
+#endif
+}
+
+ISR(WDT_vect) {
+    //sei();  // With the interrupt driven serial we need to allow interrupts.
+    // poweroff
+    //wdt_disable();     
+    hg.shutdown();
+    // fan at full power to prevent overheating
+    digital_write(FAN_GUN_PIN, HIGH);//hg.setFanDuty(max_working_fan);
+    //Serial.println("WATCHDOG_FIRED");
+    disp.message(failText, "WDT");
+    pCurrentScreen = &errScr;
+    pCurrentScreen->init();
+    cli(); // Stop interrupts
+    // wait some time to cool it down if necessary, if we are here we don't know what happened, just wait some time
+    for (int i = 500; i>0 ; i--) { // about 120 seconds delay
+        wdt_reset(); // avoid firing another watchdog during wait time
+        //NOP;
+        _MillisecDelay(250);
+    }
+    resetFunc();  //call reset to auto-reboot Arduino
 }
