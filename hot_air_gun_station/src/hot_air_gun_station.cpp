@@ -9,11 +9,11 @@
 //todo: draw current temp with different color if near, below, higher that set temp
 //todo: evaluate if possile to join fanTune and PID cfg menu in one
 //todo: if possible try to avoid AC synch error on power off 
-//todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed alway rewritten in eeprom now
+//todo: better handling of eeprom save to avoid frequent save or re-save the same config. Fan cfg and preset temp/fanSpeed always rewritten in eeprom now
 //done: add watchdog
 //todo: make editable the min fan cooling speed
 //todo: two set of pid coeff, one aggressive for fast heating and another to keep temp
-//dobe: more sensitive cradle detection
+//done: more sensitive cradle detection
 
 //done: tune Encoder Time in ms to change encoder quickly (see fast_timeoutn library) 
 //              todo: still not ok, try to ignore fast move and set 1 increment in any case or change library!
